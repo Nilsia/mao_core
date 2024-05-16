@@ -49,6 +49,15 @@ impl CommonCardType {
             CommonCardType::Diamond | CommonCardType::Heart => CardColor::Red,
         }
     }
+    fn to_card_string(&self) -> String {
+        // returns a one or two character string for the card graphics
+        match self {
+            CommonCardType::Spade => "♤".to_string(),
+            CommonCardType::Diamond => "\x1b[31m♦\x1b[0m".to_string(),
+            CommonCardType::Club => "♧".to_string(),
+            CommonCardType::Heart => "\x1b[31m♥\x1b[0m".to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -56,6 +65,23 @@ pub enum CardType {
     Common(CommonCardType),
     Rule,
     Jocker { desc: String, color: CardColor },
+}
+
+impl CardType {
+    fn to_card_string(&self) -> String {
+        // returns a one or two character string for the card graphics
+        match self {
+            CardType::Common(color_type) => color_type.to_card_string(),
+            CardType::Rule => "♯".to_string(), // trouver un caracter de rêgle (l'outil pour mesurer) à mettre à la place
+            CardType::Jocker { desc, color } => {
+                if color == &CardColor::Red {
+                    "\x1b[31mJ\x1b[0m".to_string()
+                } else {
+                    "J".to_string()
+                }
+            }
+        }
+    }
 }
 
 impl std::fmt::Display for CardType {
@@ -73,6 +99,17 @@ pub enum CardValue {
     Number(isize),
     MinusInfinity,
     PlusInfinity,
+}
+
+impl CardValue {
+    fn to_card_string(&self) -> String {
+        // returns a one or two character string for the card graphics
+        match self {
+            CardValue::Number(i) => format!("{i}"),
+            CardValue::MinusInfinity => "-∞".to_string(),
+            CardValue::PlusInfinity => "+∞".to_string(),
+        }
+    }
 }
 
 impl std::fmt::Display for CardValue {
@@ -118,17 +155,32 @@ impl Card {
     }
 }
 
-impl std::fmt::Display for Card {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} {} {}",
-            self.get_value(),
-            self.get_sign(),
-            self.rule
-                .as_ref()
-                .map(|s| "(".to_string() + s + ")")
-                .unwrap_or(String::new())
-        )
+impl ToString for Card {
+    #[rustfmt::skip]
+    fn to_string(&self) -> String {
+        let mut result = String::new();
+
+        let add_side = |txt: String, right: bool| {
+            if txt.len() == 2 {
+                txt
+            }
+            else {
+                if right {
+                    txt + " "
+                }
+                else {
+                    " ".to_owned() + &txt
+                }
+            }
+        };
+        
+        result +=            "╭───────╮";
+        result += &format!("\n│{}     │", add_side(self.value.to_card_string(), true));
+        result += &format!("\n│{}     │", add_side(self.sign.to_card_string(), true));
+        result +=          "\n│       │";
+        result += &format!("\n│     {}│", add_side(self.sign.to_card_string(), false));
+        result += &format!("\n│     {}│", add_side(self.value.to_card_string(), false));
+        result +=          "\n╰───────╯";
+        return result;
     }
 }

@@ -7,7 +7,7 @@ pub trait StackProperty {
     fn get_cards_mut(&mut self) -> &mut Vec<Card>;
     fn print_cards(&self) -> Result<(), Error> {
         for card in self.get_cards() {
-            print!("{} ||", card);
+            print!("{} ||", card.to_string());
         }
         print!("\n");
         std::io::stdout().flush()?;

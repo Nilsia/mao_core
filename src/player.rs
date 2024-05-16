@@ -1,3 +1,5 @@
+use std::io::{Stdout, Write};
+
 use crate::{card::Card, error::Error, stack::StackProperty};
 
 #[derive(Debug, Clone)]
@@ -15,9 +17,44 @@ impl Player {
         &self.pseudo
     }
 
-    pub fn print_self_cards(&self) -> Result<(), Error> {
-        println!("Your hand ({}) : ", self.pseudo);
-        self.print_cards()?;
+    pub fn print_self_cards(
+        &self,
+        elevated_index: Option<usize>,
+        card_width: Option<usize>,
+    ) -> Result<(), Error> {
+        let card_width = card_width.unwrap_or(9);
+        let elevated_index = elevated_index.unwrap_or(self.hand.len());
+        let lines: Vec<Vec<String>> = self
+            .hand
+            .iter()
+            .map(|c| {
+                c.to_string()
+                    .split("\n")
+                    .map(String::from)
+                    .collect::<Vec<String>>()
+            })
+            .collect();
+
+        for i in 0..(7 + 1) {
+            for index in 0..lines.len() {
+                if index != elevated_index {
+                    if i == 0 {
+                        print!("\x1b[{}C", card_width);
+                    } else {
+                        print!("{}", lines[index][i - 1]);
+                        print!("\x1b[{}D", 9 - card_width);
+                    }
+                } else {
+                    if i == 7 {
+                        print!("\x1b[{}C", card_width);
+                    } else {
+                        print!("{}", lines[index][i]);
+                        print!("\x1b[{}D", 9 - card_width);
+                    }
+                }
+            }
+            print!("\n");
+        }
         Ok(())
     }
 }
