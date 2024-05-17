@@ -1,6 +1,8 @@
 use libloading::{Library, Symbol};
 
-use crate::{error::Error, mao_event::MaoEvent, mao_event_result::MaoEventResult, mao_struct::Mao};
+use crate::{
+    error::Error, mao_event::mao_event::MaoEvent, mao_event_result::MaoEventResult, mao_struct::Mao,
+};
 
 type OnEventFunctionSignature = fn(&MaoEvent, &mut Mao) -> anyhow::Result<MaoEventResult>;
 

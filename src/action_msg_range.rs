@@ -4,7 +4,7 @@ use crate::{
     error::Error,
     mao_struct::Mao,
     player::Player,
-    stack::{StackProperty, StackType},
+    stack::{stack_property::StackProperty, stack_type::StackType},
 };
 
 pub struct ActionMsgRange {

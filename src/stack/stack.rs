@@ -1,19 +1,6 @@
-use std::io::Write;
+use crate::card::card::Card;
 
-use crate::{card::Card, error::Error};
-
-pub trait StackProperty {
-    fn get_cards(&self) -> &[Card];
-    fn get_cards_mut(&mut self) -> &mut Vec<Card>;
-    fn print_cards(&self) -> Result<(), Error> {
-        for card in self.get_cards() {
-            print!("{} ||", card.to_string());
-        }
-        print!("\n");
-        std::io::stdout().flush()?;
-        Ok(())
-    }
-}
+use super::{stack_property::StackProperty, stack_type::StackType};
 
 #[derive(Debug)]
 pub struct Stack {
@@ -62,6 +49,11 @@ impl Stack {
     pub fn top_mut(&mut self) -> Option<&mut Card> {
         self.cards.last_mut()
     }
+
+    pub fn draw_card(&mut self) -> Option<Card> {
+        if self.stack_type.contains(&StackType::Drawable) {}
+        self.cards.pop()
+    }
 }
 
 impl std::ops::Deref for Stack {
@@ -84,26 +76,5 @@ impl StackProperty for Stack {
 
     fn get_cards_mut(&mut self) -> &mut Vec<Card> {
         &mut self.cards
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum StackType {
-    PlayedStack, // where we play
-    Draw,        //pioche
-    Discard,     // defausse
-}
-
-impl std::fmt::Display for StackType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                StackType::PlayedStack => "PlayedStack",
-                StackType::Draw => "Draw",
-                StackType::Discard => "Discard",
-            }
-        )
     }
 }

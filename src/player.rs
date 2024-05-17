@@ -1,8 +1,6 @@
-use std::io::{Stdout, Write};
+use crate::{card::card::Card, error::Error, stack::stack_property::StackProperty};
 
-use crate::{card::Card, error::Error, stack::StackProperty};
-
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct Player {
     pseudo: String,
     hand: Vec<Card>, // (rule name, card)

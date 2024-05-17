@@ -1,4 +1,4 @@
-use crate::stack::StackType;
+use crate::stack::stack_type::StackType;
 
 #[derive(Debug)]
 pub struct DmDescription(pub(crate) String);
@@ -13,10 +13,17 @@ pub enum Error {
     AnyhowError { error: anyhow::Error },
     RuleNotFound { desc: DmDescription },
     NoStackAvailable { stacks: Vec<StackType> },
-    StackNotFound { stack_index: usize, len: usize },
-    InvalidPlayerIndex { player_index: usize, len: usize },
     NotEnoughCards,
     GivenSliceEmpty,
+    InvalidCardIndex { card_index: usize, len: usize },
+    InvalidStackIndex { stack_index: usize, len: usize },
+    InvalidPlayerIndex { player_index: usize, len: usize },
+}
+
+impl Error {
+    fn invalid_index(&self, msg: &str, index: usize, len: usize) -> String {
+        format!("Index out of range : {index} (len: {len}, {msg}) ")
+    }
 }
 
 impl From<Result<(), Error>> for Error {
@@ -54,14 +61,17 @@ impl std::fmt::Display for Error {
                         .join(", ")
                 )
             }
-            Error::StackNotFound { stack_index, len } => {
-                write!(f, "index of stack is {} but len is {}", stack_index, len)
-            }
             Error::InvalidPlayerIndex { player_index, len } => {
-                write!(f, "index of players is {} but len is {}", player_index, len)
+                write!(f, "{}", self.invalid_index("player", *player_index, *len))
             }
             Error::NotEnoughCards => write!(f, "Not enough cards"),
-            Error::GivenSliceEmpty => todo!(),
+            Error::GivenSliceEmpty => write!(f, "Given slice empty"),
+            Error::InvalidCardIndex { card_index, len } => {
+                write!(f, "{}", self.invalid_index("card", *card_index, *len))
+            }
+            Error::InvalidStackIndex { stack_index, len } => {
+                write!(f, "{}", self.invalid_index("stack", *stack_index, *len))
+            }
         }
     }
 }
