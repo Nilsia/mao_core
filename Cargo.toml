@@ -3,6 +3,7 @@ name = "mao_core"
 version = "0.1.0"
 edition = "2021"
 description = "A core library for playing to the mao board game, with the handle of custom rules !"
+license-file = "LICENSE"
 
 
 [dependencies]
