@@ -1,5 +1,5 @@
 [package]
-name = "mao"
+name = "mao_core"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,5 +7,4 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.83"
 libloading = "0.8"
-paste = "1.0.15"
 rand = "0.8.5"
