@@ -29,16 +29,23 @@ impl Player {
         elevated_index: Option<usize>,
         card_width: Option<usize>,
     ) -> Result<(), Error> {
+        // TODO show hidden card (back)
         let card_width = card_width.unwrap_or(9);
         let elevated_index = elevated_index.unwrap_or(self.hand.len());
         let lines: Vec<Vec<String>> = self
             .hand
             .iter()
-            .map(|c| {
-                c.to_string()
-                    .split("\n")
-                    .map(String::from)
-                    .collect::<Vec<String>>()
+            .filter_map(|c| {
+                if c.owner_can_see_it() {
+                    Some(
+                        c.to_string()
+                            .split("\n")
+                            .map(String::from)
+                            .collect::<Vec<String>>(),
+                    )
+                } else {
+                    None
+                }
             })
             .collect();
 

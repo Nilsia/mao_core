@@ -7,6 +7,7 @@ pub struct Stack {
     cards: Vec<Card>,
     visible: bool,
     stack_type: Vec<StackType>,
+    #[allow(dead_code)]
     in_fron_of: Option<String>, // player pseudo
 }
 

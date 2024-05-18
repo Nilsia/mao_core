@@ -292,6 +292,7 @@ impl Mao {
             .map(|v| *v)
     }
 
+    #[allow(dead_code)]
     fn get_activated_rule_by_name(&self, rule_name: &str) -> Option<&Rule> {
         Mao::get_rule_by_name(&self.activated_rules, rule_name)
     }

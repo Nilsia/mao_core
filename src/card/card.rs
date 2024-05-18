@@ -9,11 +9,12 @@ pub struct Card {
     value: CardValue,
     sign: CardType,
     rule: Option<String>,
+    owner_can_see_it: bool
 }
 
 impl Card {
     pub fn new(value: CardValue, sign: CardType, rule: Option<String>) -> Self {
-        Self { value, sign, rule }
+        Self { value, sign, rule , owner_can_see_it: true}
     }
 
     pub fn get_value(&self) -> &CardValue {
@@ -27,6 +28,10 @@ impl Card {
     pub fn get_rule(&self) -> Option<&str> {
         self.rule.as_ref().map(|x| x.as_str())
     }
+
+    pub fn owner_can_see_it(&self) -> bool {self.owner_can_see_it}
+
+    pub fn set_owner_can_see_it(&mut self , value: bool) {self.owner_can_see_it =value}
 
     pub fn get_color(&self) -> CardColor {
         match self.sign {
