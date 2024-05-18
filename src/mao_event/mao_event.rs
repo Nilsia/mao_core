@@ -26,18 +26,20 @@ pub enum MaoEvent {
     EndPlayerTurn {
         events: Vec<MaoEvent>,
     },
+    VerifyEvent,
 }
 
 impl MaoEvent {
     pub fn get_card(&self) -> Option<&Card> {
         match self {
-            MaoEvent::PlayedCardEvent(ref e) => Some(&e.card),
-            MaoEvent::DiscardCardEvent(ref e) => Some(&e.card),
-            MaoEvent::DrawedCardEvent(ref e) => Some(&e.card),
+            MaoEvent::PlayedCardEvent(ref e) => Some(&e.played_card),
+            MaoEvent::DiscardCardEvent(ref e) => Some(&e.played_card),
+            MaoEvent::DrawedCardEvent(ref e) => Some(&e.played_card),
             MaoEvent::GiveCardEvent { card, .. } => Some(&card),
             MaoEvent::StackRunsOut { .. } => None,
             MaoEvent::GameStart => None,
             MaoEvent::EndPlayerTurn { .. } => None,
+            MaoEvent::VerifyEvent => unreachable!("verify event"),
         }
     }
 }

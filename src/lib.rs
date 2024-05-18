@@ -21,3 +21,5 @@ pub mod stack {
     pub mod stack_property;
     pub mod stack_type;
 }
+
+pub const VERSION: &str = "1.0";

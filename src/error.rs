@@ -5,19 +5,46 @@ pub struct DmDescription(pub(crate) String);
 
 #[derive(Debug)]
 pub enum Error {
-    RuleNotValid { desc: DmDescription },
+    RuleNotValid {
+        desc: DmDescription,
+    },
     NotEnoughCardsForInitilization,
-    InvalidRulesDirectory { desc: DmDescription },
-    LibLoading { desc: DmDescription },
-    IOError { error: std::io::Error },
-    AnyhowError { error: anyhow::Error },
-    RuleNotFound { desc: DmDescription },
-    NoStackAvailable { stacks: Vec<StackType> },
+    InvalidRulesDirectory {
+        desc: DmDescription,
+    },
+    LibLoading {
+        desc: DmDescription,
+    },
+    IOError {
+        error: std::io::Error,
+    },
+    AnyhowError {
+        error: anyhow::Error,
+    },
+    RuleNotFound {
+        desc: DmDescription,
+    },
+    NoStackAvailable {
+        stacks: Vec<StackType>,
+    },
     NotEnoughCards,
     GivenSliceEmpty,
-    InvalidCardIndex { card_index: usize, len: usize },
-    InvalidStackIndex { stack_index: usize, len: usize },
-    InvalidPlayerIndex { player_index: usize, len: usize },
+    InvalidCardIndex {
+        card_index: usize,
+        len: usize,
+    },
+    InvalidStackIndex {
+        stack_index: usize,
+        len: usize,
+    },
+    InvalidPlayerIndex {
+        player_index: usize,
+        len: usize,
+    },
+    FunctionNotFound {
+        rule_name: String,
+        func_name: String,
+    },
 }
 
 impl Error {
@@ -72,6 +99,14 @@ impl std::fmt::Display for Error {
             Error::InvalidStackIndex { stack_index, len } => {
                 write!(f, "{}", self.invalid_index("stack", *stack_index, *len))
             }
+            Error::FunctionNotFound {
+                rule_name,
+                func_name,
+            } => write!(
+                f,
+                "The function {} has not been found inside the rule {}",
+                func_name, rule_name
+            ),
         }
     }
 }

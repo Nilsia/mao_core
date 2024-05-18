@@ -1,11 +1,22 @@
 use crate::mao_struct::Mao;
 
+pub type PenalityCallbackFunction = fn(&mut Mao, player_index: usize) -> anyhow::Result<()>;
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct Disallow {
     pub rule: String,
     pub msg: String,
+    pub penality: Option<PenalityCallbackFunction>,
 }
 impl Disallow {
+    pub fn new(rule: String, msg: String, penality: Option<PenalityCallbackFunction>) -> Self {
+        Self {
+            rule,
+            msg,
+            penality,
+        }
+    }
+
     pub fn print_warning(&self) {
         println!(
             "You are not allowed to do this :{} ({})",
@@ -20,6 +31,15 @@ pub type CallbackFuntion = fn(mao: &mut Mao) -> anyhow::Result<()>;
 pub struct MaoEventResult {
     pub necessary: bool,
     pub res_type: MaoEventResultType,
+}
+
+impl MaoEventResult {
+    pub fn new(necessary: bool, res_type: MaoEventResultType) -> Self {
+        Self {
+            necessary,
+            res_type,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]

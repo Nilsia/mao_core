@@ -156,12 +156,18 @@ impl Mao {
             vec![StackType::Playable],
         ));
 
-        let s = Self::light(libraries, stacks);
-        if !s.rules_valid() {
-            return Err(Error::RuleNotValid {
-                desc: DmDescription("A library is not valid".to_string()),
+        let mut s = Self::light(libraries, stacks);
+        if let Err(e) = s.rules_valid() {
+            return Err(Error::LibLoading {
+                desc: DmDescription(
+                    e.iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<String>>()
+                        .join("\n"),
+                ),
             });
         }
+
         Ok(s)
     }
 }
@@ -174,6 +180,20 @@ impl Mao {
             visible,
             vec![StackType::Playable],
         ))
+    }
+
+    pub fn print_all_top_card_playable_stacks(&self) {
+        let playable_stacks = self.get_playable_stacks();
+        for (i, stack) in playable_stacks {
+            println!(
+                "Stack ({}) : \n{}",
+                i,
+                stack
+                    .top()
+                    .map(|v| v.to_string())
+                    .unwrap_or(String::from("empty"))
+            );
+        }
     }
 
     pub fn get_stack_target(
@@ -199,6 +219,16 @@ impl Mao {
         Ok(s)
     }
 
+    pub fn get_top_card_playable_stack(&self, stack_index: usize) -> Result<Option<&Card>, Error> {
+        self.stacks
+            .get(stack_index)
+            .ok_or(Error::InvalidStackIndex {
+                stack_index,
+                len: self.stacks.len(),
+            })
+            .map(|stack| stack.top())
+    }
+
     pub fn remove_card_from_stack_target(
         &mut self,
         target_index: StackTarget,
@@ -215,8 +245,19 @@ impl Mao {
         Ok(self.get_stack_target(target_index)?.add_card(card))
     }
 
-    pub fn rules_valid(&self) -> bool {
-        self.available_rules.iter().all(|l| l.is_valid_rule())
+    pub fn rules_valid(&mut self) -> Result<(), Vec<Error>> {
+        let mut invalids = Vec::new();
+        for i in 0..self.available_rules.len() {
+            let rule = self.available_rules.get(i).unwrap().to_owned();
+            if let Err(e) = rule.is_valid_rule(self) {
+                invalids.push(e);
+            }
+        }
+        if invalids.is_empty() {
+            Ok(())
+        } else {
+            Err(invalids)
+        }
     }
 
     pub fn player_finish_turn(&mut self) -> Result<(), Error> {
@@ -233,22 +274,37 @@ impl Mao {
         let mut results = Vec::with_capacity(self.activated_rules.len());
         for i in 0..self.activated_rules.len() {
             unsafe {
-                results.push(self.activated_rules.get_unchecked(i).get_func()?(
-                    &event, self,
-                )?);
+                results.push(self
+                    .activated_rules
+                    .get_unchecked(i)
+                    .get_on_event_func()?(&event, self)?);
             }
         }
         Ok(results)
     }
 
+    fn get_rule_by_name<'a>(rules: &'a [Rule], rule_name: &str) -> Option<&'a Rule> {
+        rules
+            .iter()
+            .filter(|rule| rule.get_name() == rule_name)
+            .collect::<Vec<&Rule>>()
+            .first()
+            .map(|v| *v)
+    }
+
+    fn get_activated_rule_by_name(&self, rule_name: &str) -> Option<&Rule> {
+        Mao::get_rule_by_name(&self.activated_rules, rule_name)
+    }
+
+    fn get_avalaible_rule_by_name(&self, rule_name: &str) -> Option<&Rule> {
+        Mao::get_rule_by_name(&self.available_rules, rule_name)
+    }
+
     pub fn activate_rule(&mut self, rule_name: &str) -> Result<(), Error> {
+        let rule_name = "lib".to_owned() + rule_name;
         Ok(self.activated_rules.push(
             (*self
-                .available_rules
-                .iter()
-                .filter(|rule| rule.get_name() == rule_name)
-                .collect::<Vec<&Rule>>()
-                .first()
+                .get_avalaible_rule_by_name(&rule_name)
                 .ok_or_else(|| Error::RuleNotFound {
                     desc: DmDescription(format!("The rule {} has not been found", rule_name)),
                 })?)
@@ -407,14 +463,39 @@ impl Mao {
         Ok(())
     }
 
-    fn give_card_to_player(
+    /// This function allows you to give a card to a player
+    /// if stack_index is given as None, the player will have to choice if there are more than one drawable stack
+    ///
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if
+    /// + there is not available drawable stacks,
+    /// + cannot refill an empty drawable stack
+    /// + the player index is invalid
+    pub fn give_card_to_player(
         &mut self,
         player_index: usize,
         stack_index: Option<usize>,
     ) -> Result<(), Error> {
         let stack_index = match stack_index {
-            None => ActionMsgRange::generate_stack_choice_str(&[StackType::Drawable], self, false)?
-                .get_action()?,
+            None => {
+                let drawable_stacks = self.get_drawable_stacks();
+                match drawable_stacks.len() {
+                    0 => {
+                        return Err(Error::NoStackAvailable {
+                            stacks: vec![StackType::Drawable],
+                        })
+                    }
+                    1 => drawable_stacks.first().unwrap().0,
+                    _ => ActionMsgRange::generate_stack_choice_str(
+                        &[StackType::Drawable],
+                        self,
+                        false,
+                    )?
+                    .get_action()?,
+                }
+            }
             Some(c) => c,
         };
         match self.stacks.get_mut(stack_index) {
@@ -477,12 +558,11 @@ impl Mao {
     }
 
     pub fn next_player(&mut self, player_index: usize, event: MaoEvent) {
-        println!("called");
         match event {
             MaoEvent::PlayedCardEvent(card_event) => {
                 // no need to remove / add cards handled before
                 if player_index == self.player_turn {
-                    let changes: PlayerTurnChange = match card_event.card.get_value() {
+                    let changes: PlayerTurnChange = match card_event.played_card.get_value() {
                         CardValue::Number(i) => match i {
                             2 => PlayerTurnChange::Update(PlayerTurnUpdater::Update(2)),
                             10 => PlayerTurnChange::Rotate(PlayerTurnUpdater::Update(1)),
@@ -492,7 +572,6 @@ impl Mao {
                         CardValue::MinusInfinity => PlayerTurnChange::default(),
                         CardValue::PlusInfinity => PlayerTurnChange::default(),
                     };
-                    println!("changes = {changes:?}");
                     self.update_turn(changes);
                 }
             }
@@ -506,6 +585,7 @@ impl Mao {
             MaoEvent::StackRunsOut { .. } => (),
             MaoEvent::GameStart => (),
             MaoEvent::EndPlayerTurn { .. } => (),
+            MaoEvent::VerifyEvent => unreachable!("verify event"),
         }
     }
 }
@@ -613,6 +693,10 @@ impl Mao {
                 match &mao_res.res_type {
                     MaoEventResultType::Disallow(disallow) => {
                         disallow.print_warning();
+                        match disallow.penality {
+                            Some(func) => func(mao, player_index)?,
+                            None => mao.give_card_to_player(player_index, None)?,
+                        }
                     }
                     MaoEventResultType::Ignored => (),
                     _ => not_ignored.push(mao_res.to_owned()),
@@ -651,7 +735,7 @@ impl Mao {
             }
             let player = mao.players.get(player_index).unwrap();
             println!(
-                "{}, you cannot play this card : {}, you took one card",
+                "{}, as penality you took one card, you cannot play this card : \n{}",
                 player.get_pseudo(),
                 card.to_string()
             );

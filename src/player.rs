@@ -15,6 +15,15 @@ impl Player {
         &self.pseudo
     }
 
+    pub fn print_self_cards_with_cmt(
+        &self,
+        elevated_index: Option<usize>,
+        card_width: Option<usize>,
+    ) -> Result<(), Error> {
+        println!("Your hand ({}) :\n", self.pseudo);
+        self.print_self_cards(elevated_index, card_width)
+    }
+
     pub fn print_self_cards(
         &self,
         elevated_index: Option<usize>,
