@@ -1,6 +1,11 @@
-use crate::mao_struct::Mao;
+use crate::{mao_event::mao_event::MaoEvent, mao_struct::Mao};
 
 pub type PenalityCallbackFunction = fn(&mut Mao, player_index: usize) -> anyhow::Result<()>;
+pub type OtherRulesCallbackFunction = fn(
+    &mut Mao,
+    previous_event: &MaoEvent,
+    results: &[MaoEventResult],
+) -> anyhow::Result<MaoEventResult>;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct Disallow {
@@ -28,16 +33,24 @@ impl Disallow {
 pub type CallbackFuntion = fn(mao: &mut Mao) -> anyhow::Result<()>;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+pub enum Necessary {
+    BasicRule(bool),
+    ImportedRule(bool),
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct MaoEventResult {
-    pub necessary: bool,
+    pub necessary: Necessary,
     pub res_type: MaoEventResultType,
+    pub other_rules_callback: Option<OtherRulesCallbackFunction>,
 }
 
 impl MaoEventResult {
-    pub fn new(necessary: bool, res_type: MaoEventResultType) -> Self {
+    pub fn new(necessary: Necessary, res_type: MaoEventResultType) -> Self {
         Self {
             necessary,
             res_type,
+            other_rules_callback: None,
         }
     }
 }
@@ -49,7 +62,6 @@ pub enum MaoEventResultType {
     OverrideBasicRule(CallbackFuntion),
     ExecuteBeforeTurnChange(CallbackFuntion),
     ExecuteAfterTurnChange(CallbackFuntion),
-    Necessary,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]

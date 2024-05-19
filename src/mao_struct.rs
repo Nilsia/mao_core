@@ -700,7 +700,25 @@ impl Mao {
                         }
                     }
                     MaoEventResultType::Ignored => (),
-                    _ => not_ignored.push(mao_res.to_owned()),
+                    MaoEventResultType::OverrideBasicRule(_)
+                    | MaoEventResultType::ExecuteBeforeTurnChange(_)
+                    | MaoEventResultType::ExecuteAfterTurnChange(_) => {
+                        not_ignored.push(mao_res.to_owned())
+                    }
+                }
+            }
+
+            for mao_res in &res {
+                if let Some(func) = mao_res.other_rules_callback {
+                    let callback_res = func(mao, &event, &not_ignored)?;
+                    match callback_res.res_type {
+                        MaoEventResultType::Ignored | MaoEventResultType::Disallow(_) => (),
+                        MaoEventResultType::OverrideBasicRule(_)
+                        | MaoEventResultType::ExecuteBeforeTurnChange(_)
+                        | MaoEventResultType::ExecuteAfterTurnChange(_) => {
+                            not_ignored.push(callback_res)
+                        }
+                    }
                 }
             }
             return Ok(if !not_ignored.is_empty() {
