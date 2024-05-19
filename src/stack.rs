@@ -1,6 +1,9 @@
-use crate::card::card::Card;
+use crate::card::Card;
 
-use super::{stack_property::StackProperty, stack_type::StackType};
+use self::{stack_property::StackProperty, stack_type::StackType};
+
+pub mod stack_property;
+pub mod stack_type;
 
 #[derive(Debug)]
 pub struct Stack {

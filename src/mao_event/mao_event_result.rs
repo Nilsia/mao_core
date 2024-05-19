@@ -1,4 +1,6 @@
-use crate::{mao_event::mao_event::MaoEvent, mao_struct::Mao};
+use crate::mao_struct::Mao;
+
+use super::MaoEvent;
 
 pub type PenalityCallbackFunction = fn(&mut Mao, player_index: usize) -> anyhow::Result<()>;
 pub type OtherRulesCallbackFunction = fn(

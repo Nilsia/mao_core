@@ -1,4 +1,9 @@
-use super::{card_value::CardValue, card_type::CardType, card_color::CardColor};
+use self::{card_value::CardValue, card_type::CardType, card_color::CardColor};
+
+    pub mod card_color;
+    pub mod card_type;
+    pub mod card_value;
+    pub mod common_card_type;
 
 
 

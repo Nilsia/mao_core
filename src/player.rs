@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::{card::card::Card, error::Error, stack::stack_property::StackProperty};
+use crate::{card::Card, error::Error, stack::stack_property::StackProperty};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct Player {

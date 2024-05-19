@@ -3,8 +3,10 @@ use std::path::PathBuf;
 use libloading::{Library, Symbol};
 
 use crate::{
-    error::Error, mao_event::mao_event::MaoEvent, mao_event_result::MaoEventResult,
-    mao_struct::Mao, VERSION,
+    error::Error,
+    mao_event::{mao_event_result::MaoEventResult, MaoEvent},
+    mao_struct::Mao,
+    VERSION,
 };
 
 type OnEventFunctionSignature = fn(&MaoEvent, &mut Mao) -> anyhow::Result<MaoEventResult>;

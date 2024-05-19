@@ -4,19 +4,17 @@ use std::{fs, ops::DerefMut, path::PathBuf};
 
 use crate::{
     action_msg_range::ActionMsgRange,
-    card::{
-        card::Card, card_type::CardType, card_value::CardValue, common_card_type::CommonCardType,
-    },
+    card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
     config::Config,
     error::{DmDescription, Error},
     mao_event::{
         card_event::CardEvent,
-        mao_event::{MaoEvent, StackTarget},
+        mao_event_result::{MaoEventResult, MaoEventResultType},
+        MaoEvent, StackTarget,
     },
-    mao_event_result::{MaoEventResult, MaoEventResultType},
     player::Player,
     rule::Rule,
-    stack::{stack::Stack, stack_property::StackProperty, stack_type::StackType},
+    stack::{stack_property::StackProperty, stack_type::StackType, Stack},
 };
 
 #[derive(Debug)]

@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::{card::card::Card, error::Error};
+use crate::{card::Card, error::Error};
 
 pub trait StackProperty: std::fmt::Debug {
     fn get_cards(&self) -> &[Card];

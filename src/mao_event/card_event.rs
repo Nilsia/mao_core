@@ -1,4 +1,4 @@
-use crate::card::card::Card;
+use crate::card::Card;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct CardEvent {

@@ -1,6 +1,9 @@
-use crate::card::card::Card;
+use crate::card::Card;
 
-use super::card_event::CardEvent;
+use self::card_event::CardEvent;
+
+pub mod card_event;
+pub mod mao_event_result;
 
 /// Represents either the index of a [`Player`] or a [`Stack`] (implements [`StackProporty`])
 #[derive(Clone, Debug)]
