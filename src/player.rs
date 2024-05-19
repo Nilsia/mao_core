@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use crate::{card::card::Card, error::Error, stack::stack_property::StackProperty};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
@@ -15,6 +17,11 @@ impl Player {
         &self.pseudo
     }
 
+    /// Prints the [`Card`] as [`Self::print_self_cards`] but with comments
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if [`Self::print_self_cards`] fails
     pub fn print_self_cards_with_cmt(
         &self,
         elevated_index: Option<usize>,
@@ -24,6 +31,11 @@ impl Player {
         self.print_self_cards(elevated_index, card_width)
     }
 
+    /// Prints the [`Card`] nicely like real cards
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if cannot flush data into std::stdout
     pub fn print_self_cards(
         &self,
         elevated_index: Option<usize>,
@@ -69,6 +81,7 @@ impl Player {
             }
             print!("\n");
         }
+        std::io::stdout().flush()?;
         Ok(())
     }
 }

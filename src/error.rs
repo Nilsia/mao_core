@@ -9,8 +9,8 @@ pub enum Error {
         desc: DmDescription,
     },
     NotEnoughCardsForInitilization,
-    InvalidRulesDirectory {
-        desc: DmDescription,
+    InvalidConfig {
+        desc: String,
     },
     LibLoading {
         desc: DmDescription,
@@ -72,7 +72,7 @@ impl std::fmt::Display for Error {
             Error::NotEnoughCardsForInitilization => {
                 write!(f, "There is not enough cards in the stack")
             }
-            Error::InvalidRulesDirectory { ref desc } => write!(f, "{}", desc.0),
+            Error::InvalidConfig { ref desc } => write!(f, "{}", desc),
             Error::LibLoading { desc } => write!(f, "{}", desc.0),
             Error::IOError { error } => write!(f, "{}", error),
             Error::RuleNotFound { desc } => write!(f, "{}", desc.0),

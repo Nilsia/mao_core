@@ -32,16 +32,22 @@ impl Disallow {
 
 pub type CallbackFuntion = fn(mao: &mut Mao) -> anyhow::Result<()>;
 
+/// This structure is affilied to a [`MaoEventResult`]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum Necessary {
+    /// This means that the event is necessary by the basic rules of the Mao
     BasicRule(bool),
-    ImportedRule(bool),
+    /// This means that the event is necessary by a rule
+    ImportedRule { necessary: bool, rule_name: String },
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct MaoEventResult {
+    /// The necessity of the event
     pub necessary: Necessary,
+    /// The type of result
     pub res_type: MaoEventResultType,
+    /// A callback function, this function is called when all rules with the same event have been called, all results not ignored results of all other rules will be passed as arguments
     pub other_rules_callback: Option<OtherRulesCallbackFunction>,
 }
 
@@ -55,12 +61,18 @@ impl MaoEventResult {
     }
 }
 
+/// The type of the [`MaoEventResult`]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum MaoEventResultType {
+    /// The event has been ignored
     Ignored,
+    /// The event has been disallowed by the rule
     Disallow(Disallow),
+    /// The event will override basic rules, the function should modify itself the player turn, the basics rules won't be modified besides
     OverrideBasicRule(CallbackFuntion),
+    /// Contains a function which will modified the player turn but not override the basic change turn, this function will be executed before the basic change turn
     ExecuteBeforeTurnChange(CallbackFuntion),
+    /// Contains a function which will modified the player turn but not override the basic change turn, this function will be executed before the basic change turn
     ExecuteAfterTurnChange(CallbackFuntion),
 }
 
