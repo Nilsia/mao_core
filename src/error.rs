@@ -45,6 +45,8 @@ pub enum Error {
         rule_name: String,
         func_name: String,
     },
+    MissingRequestCallbacks(Vec<&'static str>),
+    InvalidRequestResponse,
 }
 
 impl Error {
@@ -107,6 +109,12 @@ impl std::fmt::Display for Error {
                 "The function {} has not been found inside the rule {}",
                 func_name, rule_name
             ),
+            Error::MissingRequestCallbacks(keys) => write!(
+                f,
+                "The following request callback functions are missing : {}",
+                keys.join(", ")
+            ),
+            Error::InvalidRequestResponse => write!(f, "Invalid Request Reponse"),
         }
     }
 }

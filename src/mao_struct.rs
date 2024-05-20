@@ -1,9 +1,9 @@
 use core::result::Result;
+use paste::paste;
 use rand::{seq::SliceRandom, thread_rng};
-use std::{fs, ops::DerefMut, path::PathBuf};
+use std::{collections::HashMap, fs, ops::DerefMut, path::PathBuf};
 
 use crate::{
-    action_msg_range::ActionMsgRange,
     card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
     config::Config,
     error::{DmDescription, Error},
@@ -17,6 +17,20 @@ use crate::{
     stack::{stack_property::StackProperty, stack_type::StackType, Stack},
 };
 
+macro_rules! generate_requests_getter {
+    ($($func_name:literal),*) => {
+        pub const REQUIRED_REQUEST_CALLBACKS: &[&'static str] = &[$($func_name),*];
+
+        paste! {
+            $(
+                pub fn [<$func_name>](&self) -> RequestCallback {
+                        *self.requests.get($func_name).unwrap()
+                }
+            )*
+        }
+
+    };
+}
 #[derive(Debug)]
 pub enum PlayerTurnUpdater {
     Set(usize),
@@ -63,6 +77,43 @@ pub enum PlayerTurnResult {
     },
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub struct RequestData {
+    pub data_type: RequestDataEnum,
+}
+
+impl RequestData {
+    pub fn new(data_type: RequestDataEnum) -> Self {
+        Self { data_type }
+    }
+}
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub enum RequestDataEnum {
+    StackChoice {
+        stack_types: Vec<StackType>,
+        new_stack: bool,
+    },
+    PlayerCardChoice {
+        /// the index of the [`Player`] who has to chose
+        player_chooser_index: usize,
+        /// allows the player to choose a card among the other players' hand, if None the choice will be among it own cards
+        among_other_players: Option<Vec<usize>>,
+    },
+}
+pub enum RequestResponse {
+    StackChoice(usize),
+    PlayerCardChoice {
+        /// the index of the [`Player`] who has choosen
+        player_chooser_index: usize,
+        /// the index of the choosen [`Player`], if None it is the player itself
+        player_choosen_index: Option<usize>,
+        /// the index of the card
+        card_index: usize,
+    },
+}
+
+pub type RequestCallback = fn(mao: &mut Mao, data: RequestData) -> anyhow::Result<RequestResponse>;
+
 #[derive(Debug)]
 pub struct Mao {
     available_rules: Vec<Rule>,
@@ -74,46 +125,11 @@ pub struct Mao {
     turn: isize,
     /// all the events of a player that it did during its turn
     player_events: Vec<MaoEvent>,
+    requests: HashMap<String, RequestCallback>,
 }
 
 // getters and setters
 impl Mao {
-    pub fn new(available_libraries: Vec<Rule>, stacks: Vec<Stack>, players: Vec<Player>) -> Self {
-        Self {
-            available_rules: available_libraries,
-            activated_rules: Vec::new(),
-            stacks,
-            players,
-            player_turn: 0,
-            turn: 1,
-            player_events: Vec::new(),
-        }
-    }
-
-    pub fn new_light(libraries: Vec<Rule>, stacks: Vec<Stack>) -> Self {
-        Self::new(libraries, stacks, Vec::new())
-    }
-
-    pub fn get_players(&self) -> &[Player] {
-        &self.players
-    }
-
-    pub fn get_players_mut(&mut self) -> &mut Vec<Player> {
-        &mut self.players
-    }
-
-    pub fn get_stacks(&self) -> &[Stack] {
-        &self.stacks
-    }
-
-    pub fn get_stacks_mut(&mut self) -> &mut Vec<Stack> {
-        &mut self.stacks
-    }
-
-    pub fn get_player_turn(&self) -> usize {
-        self.player_turn
-    }
-
     /// this function loads the Mao structure from the `config` argument
     ///
     /// # Panics
@@ -125,8 +141,12 @@ impl Mao {
     /// This function will return an error if
     /// + the config is not valid
     /// + a rule cannot be found
-    pub fn from_directory(config: &Config) -> Result<Self, Error> {
+    pub fn from_directory(
+        config: &Config,
+        requests: HashMap<String, RequestCallback>,
+    ) -> Result<Self, Error> {
         let path = PathBuf::from(&config.dirname);
+        config.verify()?;
         let rules: Vec<String> = fs::read_dir(&path)
             .map_err(|e| {
                 Err(Error::InvalidConfig {
@@ -151,7 +171,7 @@ impl Mao {
 
         // generate stacks
         let mut stacks = vec![Stack::new(
-            generate_common_draw(),
+            Self::generate_common_draw(),
             false,
             vec![StackType::Drawable],
         )];
@@ -162,7 +182,8 @@ impl Mao {
             vec![StackType::Playable],
         ));
 
-        let mut s = Self::new_light(libraries, stacks);
+        let mut s = Self::new_light(libraries, stacks, requests);
+        s.verify()?;
         // verify that all rules are valid
         if let Err(e) = s.rules_valid() {
             return Err(Error::LibLoading {
@@ -177,10 +198,81 @@ impl Mao {
 
         Ok(s)
     }
+
+    pub fn get_player_hand_len(&self, player_index: usize) -> Result<usize, Error> {
+        Ok(self
+            .players
+            .get(player_index)
+            .ok_or(Error::InvalidPlayerIndex {
+                player_index,
+                len: self.players.len(),
+            })?
+            .get_cards()
+            .len())
+    }
+
+    pub fn get_player_turn(&self) -> usize {
+        self.player_turn
+    }
+
+    pub fn get_players(&self) -> &[Player] {
+        &self.players
+    }
+
+    pub fn get_players_mut(&mut self) -> &mut Vec<Player> {
+        &mut self.players
+    }
+
+    pub fn get_stacks(&self) -> &[Stack] {
+        &self.stacks
+    }
+
+    pub fn get_stacks_mut(&mut self) -> &mut Vec<Stack> {
+        &mut self.stacks
+    }
+
+    pub fn new(
+        available_libraries: Vec<Rule>,
+        stacks: Vec<Stack>,
+        players: Vec<Player>,
+        requests: HashMap<String, RequestCallback>,
+    ) -> Self {
+        Self {
+            available_rules: available_libraries,
+            activated_rules: Vec::new(),
+            stacks,
+            players,
+            player_turn: 0,
+            turn: 1,
+            player_events: Vec::new(),
+            requests,
+        }
+    }
+
+    pub fn new_light(
+        libraries: Vec<Rule>,
+        stacks: Vec<Stack>,
+        requests: HashMap<String, RequestCallback>,
+    ) -> Self {
+        Self::new(libraries, stacks, Vec::new(), requests)
+    }
 }
 
 // miscellious
 impl Mao {
+    fn verify(&self) -> Result<(), Error> {
+        let keys: Vec<&str> = self.requests.keys().map(|v| v.as_str()).collect();
+        let mut missing_keys = Vec::new();
+        for key in Self::REQUIRED_REQUEST_CALLBACKS {
+            if !keys.contains(key) {
+                missing_keys.push(key.to_owned());
+            }
+        }
+        match missing_keys.is_empty() {
+            true => Ok(()),
+            false => Err(Error::MissingRequestCallbacks(missing_keys)),
+        }
+    }
     /// Enable a rule according to its name, searching from the available rules
     ///
     /// # Errors
@@ -233,20 +325,25 @@ impl Mao {
     /// # Errors
     ///
     /// This function will return an error if it is not possible to retrieve the player's choice
-    fn draw_stack_getter<'a>(
-        mao: &Mao,
-        stacks: &'a [(usize, &Stack)],
-    ) -> Result<Option<(usize, &'a Stack)>, Error> {
-        Ok(Some(match stacks.len() {
+    fn draw_stack_getter(mao: &mut Mao, stacks_index: &[usize]) -> Result<Option<usize>, Error> {
+        Ok(Some(match stacks_index.len() {
             0 => {
                 println!("No drawable stacks available");
                 return Ok(None);
             }
-            1 => stacks.first().unwrap().to_owned(),
-            _ => stacks
+            1 => stacks_index.first().unwrap().to_owned(),
+            _ => stacks_index
                 .get(
-                    ActionMsgRange::generate_stack_choice_str(&[StackType::Drawable], mao, false)?
-                        .get_action()?,
+                    match mao.request_stack_choice()(
+                        mao,
+                        RequestData::new(RequestDataEnum::StackChoice {
+                            stack_types: vec![StackType::Drawable],
+                            new_stack: false,
+                        }),
+                    )? {
+                        RequestResponse::StackChoice(i) => i,
+                        _ => return Err(Error::InvalidRequestResponse),
+                    },
                 )
                 .unwrap()
                 .to_owned(),
@@ -396,12 +493,18 @@ impl Mao {
                         })
                     }
                     1 => drawable_stacks.first().unwrap().0,
-                    _ => ActionMsgRange::generate_stack_choice_str(
-                        &[StackType::Drawable],
-                        self,
-                        false,
-                    )?
-                    .get_action()?,
+                    _ => {
+                        match self.request_stack_choice()(
+                            self,
+                            RequestData::new(RequestDataEnum::StackChoice {
+                                stack_types: vec![StackType::Drawable],
+                                new_stack: false,
+                            }),
+                        )? {
+                            RequestResponse::StackChoice(i) => i,
+                            _ => return Err(Error::InvalidRequestResponse),
+                        }
+                    }
                 }
             }
             Some(c) => c,
@@ -694,15 +797,21 @@ impl Mao {
         mao: &mut Mao,
         player_index: usize,
     ) -> anyhow::Result<MaoActionResult> {
-        let mut stacks = mao.get_specific_stacks(&[StackType::Drawable]);
+        let mut stacks_index: Vec<usize> = mao
+            .get_specific_stacks(&[StackType::Drawable])
+            .iter()
+            .map(|(i, _)| *i)
+            .collect();
+
         // let nb_cards = ActionMsgRange::generate_nb_cards_draw_choice_str(30).get_action()?;
         let mut nb_cards = 1;
         // TODO ask if can draw as much cards
 
-        let (mut stack_index, mut stack) =
-            Self::draw_stack_getter(mao, &stacks)?.ok_or(Error::NoStackAvailable {
+        let mut stack_index =
+            Self::draw_stack_getter(mao, &stacks_index)?.ok_or(Error::NoStackAvailable {
                 stacks: vec![StackType::Drawable],
             })?;
+        let mut stack = mao.get_stacks().get(stack_index).unwrap();
 
         // TODO handle multiple cards draw
         while nb_cards > 0 {
@@ -714,9 +823,6 @@ impl Mao {
                     player_index,
                     Some(stack_index),
                 ));
-
-                drop(stack);
-                drop(stacks);
 
                 // call rules
                 let res = mao.on_event(&event)?;
@@ -746,16 +852,19 @@ impl Mao {
                     }
                 }
             } else {
-                drop(stack);
-                drop(stacks);
                 // have to refill the draw stack
                 mao.refill_drawable_stacks(stack_index, true)?;
             }
-            stacks = mao.get_specific_stacks(&[StackType::Drawable]);
-            (stack_index, stack) =
-                Self::draw_stack_getter(mao, &stacks)?.ok_or(Error::NoStackAvailable {
+            stacks_index = mao
+                .get_specific_stacks(&[StackType::Drawable])
+                .iter()
+                .map(|v| v.0)
+                .collect();
+            stack_index =
+                Self::draw_stack_getter(mao, &stacks_index)?.ok_or(Error::NoStackAvailable {
                     stacks: vec![StackType::Drawable],
                 })?;
+            stack = mao.get_stacks().get(stack_index).unwrap();
         }
         Ok(MaoActionResult::Nothing)
     }
@@ -766,14 +875,31 @@ impl Mao {
     ) -> anyhow::Result<MaoActionResult> {
         // getting player move
         let mut stack_index: Option<usize> = Some(
-            ActionMsgRange::generate_stack_choice_str(&[StackType::Playable], mao, true)?
-                .get_action()?,
+            match mao.request_stack_choice()(
+                mao,
+                RequestData::new(RequestDataEnum::StackChoice {
+                    stack_types: vec![StackType::Playable],
+                    new_stack: true,
+                }),
+            )? {
+                RequestResponse::StackChoice(i) => i,
+                _ => return Err(Error::InvalidRequestResponse.into()),
+            },
         );
         if stack_index.as_ref().unwrap() == &std::usize::MAX {
             stack_index = None;
         }
+        let card_index = match mao.request_card_choice()(
+            mao,
+            RequestData::new(RequestDataEnum::PlayerCardChoice {
+                player_chooser_index: player_index,
+                among_other_players: None,
+            }),
+        )? {
+            RequestResponse::PlayerCardChoice { card_index, .. } => card_index,
+            _ => return Err(Error::InvalidRequestResponse.into()),
+        };
         let player = mao.get_players().get(player_index).unwrap();
-        let card_index = ActionMsgRange::generate_card_choice_str(player).get_action()?;
         let card = player.get_cards().get(card_index).unwrap().to_owned();
 
         // calling rules
@@ -878,25 +1004,27 @@ impl Mao {
     pub fn player_giveup_turn(_: &mut Mao, _: usize) -> anyhow::Result<MaoActionResult> {
         Ok(MaoActionResult::Nothing)
     }
-}
 
-pub fn generate_common_draw() -> Vec<Card> {
-    let types = &[
-        CommonCardType::Spade,
-        CommonCardType::Diamond,
-        CommonCardType::Club,
-        CommonCardType::Heart,
-    ];
-    let mut cards = Vec::new();
-    for i in 1..=13 {
-        for t in types {
-            cards.push(Card::new(
-                CardValue::Number(i as isize),
-                CardType::Common(t.to_owned()),
-                None,
-            ));
+    pub fn generate_common_draw() -> Vec<Card> {
+        let types = &[
+            CommonCardType::Spade,
+            CommonCardType::Diamond,
+            CommonCardType::Club,
+            CommonCardType::Heart,
+        ];
+        let mut cards = Vec::new();
+        for i in 1..=13 {
+            for t in types {
+                cards.push(Card::new(
+                    CardValue::Number(i as isize),
+                    CardType::Common(t.to_owned()),
+                    None,
+                ));
+            }
         }
+        cards.shuffle(&mut thread_rng());
+        cards
     }
-    cards.shuffle(&mut thread_rng());
-    cards
+
+    generate_requests_getter!("request_stack_choice", "request_card_choice");
 }
