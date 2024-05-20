@@ -1,3 +1,5 @@
+use crate::card::{RED, RESET};
+
 use super::{card_color::CardColor, common_card_type::CommonCardType};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -15,7 +17,7 @@ impl CardType {
             CardType::Rule => "♯".to_string(), // trouver un caracter de rêgle (l'outil pour mesurer) à mettre à la place
             CardType::Jocker { color, .. } => {
                 if color == &CardColor::Red {
-                    "\x1b[31mJ\x1b[0m".to_string()
+                    format!("\x1b{}\x1b{}", RED, RESET)
                 } else {
                     "J".to_string()
                 }

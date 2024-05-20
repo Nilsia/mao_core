@@ -1,4 +1,4 @@
-use super::card_color::CardColor;
+use super::{card_color::CardColor, RED, RESET};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CommonCardType {
@@ -34,9 +34,9 @@ impl CommonCardType {
         // returns a one or two character string for the card graphics
         match self {
             CommonCardType::Spade => "♤".to_string(),
-            CommonCardType::Diamond => "\x1b[31m♦\x1b[0m".to_string(),
+            CommonCardType::Diamond => format!("\x1b{}♦\x1b{}", RED, RESET),
             CommonCardType::Club => "♧".to_string(),
-            CommonCardType::Heart => "\x1b[31m♥\x1b[0m".to_string(),
+            CommonCardType::Heart => format!("\x1b{}♥\x1b{}", RED, RESET),
         }
     }
 }

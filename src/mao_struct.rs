@@ -651,19 +651,20 @@ impl Mao {
         Ok(())
     }
 
-    /// print all top cards of the Playable [`Stack`]
-    pub fn print_all_top_card_playable_stacks(&self) {
-        let playable_stacks = self.get_playable_stacks();
-        for (i, stack) in playable_stacks {
-            println!(
-                "Stack ({}) : \n{}",
-                i,
-                stack
-                    .top()
-                    .map(|v| v.to_string())
-                    .unwrap_or(String::from("empty"))
-            );
-        }
+    /// Returns all top cards of the Playable [`Stack`] as String followed by their index
+    pub fn all_top_card_playable_stacks_string(&self) -> Vec<(usize, String)> {
+        self.get_playable_stacks()
+            .iter()
+            .map(|(i, stack)| {
+                (
+                    *i,
+                    stack
+                        .top()
+                        .map(|v| v.to_string())
+                        .unwrap_or(String::from("empty")),
+                )
+            })
+            .collect()
     }
 
     /// Add a new [`Card`] into the `target` according to [`StackTarget`]
