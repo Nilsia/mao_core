@@ -4,12 +4,12 @@ use libloading::{Library, Symbol};
 
 use crate::{
     error::Error,
+    mao::mao_internal::MaoInternal,
     mao_event::{mao_event_result::MaoEventResult, MaoEvent},
-    mao_struct::Mao,
     VERSION,
 };
 
-type OnEventFunctionSignature = fn(&MaoEvent, &mut Mao) -> anyhow::Result<MaoEventResult>;
+type OnEventFunctionSignature = fn(&MaoEvent, &mut MaoInternal) -> anyhow::Result<MaoEventResult>;
 type VersionGetterFunction = fn() -> String;
 
 #[derive(Debug)]
@@ -46,7 +46,7 @@ impl Rule {
         unsafe { Ok(self.lib.get::<VersionGetterFunction>(b"get_version\0")?()) }
     }
 
-    pub fn is_valid_rule(&self, mao: &mut Mao) -> Result<(), Error> {
+    pub fn is_valid_rule(&self, mao: &mut MaoInternal) -> Result<(), Error> {
         unsafe {
             let event = MaoEvent::VerifyEvent;
             match self.get_on_event_func() {

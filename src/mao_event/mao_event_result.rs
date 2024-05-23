@@ -1,10 +1,10 @@
-use crate::mao_struct::Mao;
+use crate::mao::mao_internal::MaoInternal;
 
 use super::MaoEvent;
 
-pub type PenalityCallbackFunction = fn(&mut Mao, player_index: usize) -> anyhow::Result<()>;
+pub type PenalityCallbackFunction = fn(&mut MaoInternal, player_index: usize) -> anyhow::Result<()>;
 pub type OtherRulesCallbackFunction = fn(
-    &mut Mao,
+    &mut MaoInternal,
     previous_event: &MaoEvent,
     results: &[MaoEventResult],
 ) -> anyhow::Result<MaoEventResult>;
@@ -32,7 +32,7 @@ impl Disallow {
     }
 }
 
-pub type CallbackFuntion = fn(mao: &mut Mao) -> anyhow::Result<()>;
+pub type CallbackFuntion = fn(mao: &mut MaoInternal) -> anyhow::Result<()>;
 
 /// This structure is affilied to a [`MaoEventResult`]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
