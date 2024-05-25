@@ -20,6 +20,8 @@ pub trait UiMaoTrait: Debug {
         mao: &mut MaoInternal,
         data: RequestData,
     ) -> anyhow::Result<RequestResponse>;
+
+    fn show_information(&mut self, msg: &str) -> anyhow::Result<()>;
 }
 
 #[derive(Debug)]

@@ -79,6 +79,10 @@ impl Card {
     pub fn empty_card() -> String {
         Self::card_with_word("empty")
     }
+
+    pub fn to_string_light(&self) -> String {
+        self.value.to_card_string() + " " + &self.sign.to_card_string()
+    }
 }
 
 #[rustfmt::skip]

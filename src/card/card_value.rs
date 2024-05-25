@@ -6,8 +6,8 @@ pub enum CardValue {
 }
 
 impl CardValue {
+    /// Returns a one or two character string for the card graphics
     pub fn to_card_string(&self) -> String {
-        // returns a one or two character string for the card graphics
         match self {
             CardValue::Number(i) => format!("{i}"),
             CardValue::MinusInfinity => "-∞".to_string(),

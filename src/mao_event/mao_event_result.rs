@@ -1,4 +1,9 @@
-use crate::mao::mao_internal::MaoInternal;
+use std::sync::{Arc, Mutex};
+
+use crate::{
+    error::Error,
+    mao::{mao_internal::MaoInternal, UiMaoTrait},
+};
 
 use super::MaoEvent;
 
@@ -24,11 +29,11 @@ impl Disallow {
         }
     }
 
-    pub fn print_warning(&self) {
-        println!(
+    pub fn print_warning(&self, ui: Arc<Mutex<dyn UiMaoTrait>>) -> Result<(), Error> {
+        Ok(ui.lock().unwrap().show_information(&format!(
             "You are not allowed to do this :{} ({})",
-            self.msg, self.rule
-        );
+            self.msg, self.rule,
+        ))?)
     }
 }
 

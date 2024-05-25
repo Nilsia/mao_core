@@ -620,6 +620,62 @@ impl MaoInternal {
         Ok(results)
     }
 
+    pub fn propagate_on_event_results(
+        &mut self,
+        player_index: usize,
+        previous_event: &MaoEvent,
+        event_results: &[MaoEventResult],
+        ui: Arc<Mutex<dyn UiMaoTrait>>,
+    ) -> Result<Option<MaoActionResult>, Error> {
+        if !event_results.iter().all(|r| match r.res_type {
+            MaoEventResultType::Ignored => true,
+            _ => false,
+        }) {
+            // one rule did not ignored it
+            let mut not_ignored = Vec::new();
+            for mao_res in event_results {
+                match &mao_res.res_type {
+                    MaoEventResultType::Disallow(disallow) => {
+                        disallow.print_warning(ui.clone())?;
+                        match disallow.penality {
+                            Some(func) => func(self, player_index)?,
+                            None => self.give_card_to_player(player_index, None, ui.clone())?,
+                        }
+                    }
+                    MaoEventResultType::Ignored => (),
+                    MaoEventResultType::OverrideBasicRule(_)
+                    | MaoEventResultType::ExecuteBeforeTurnChange(_)
+                    | MaoEventResultType::ExecuteAfterTurnChange(_) => {
+                        not_ignored.push(mao_res.to_owned())
+                    }
+                }
+            }
+
+            for mao_res in event_results {
+                if let Some(func) = mao_res.other_rules_callback {
+                    let callback_res = func(self, &previous_event, &not_ignored)?;
+                    match callback_res.res_type {
+                        MaoEventResultType::Ignored | MaoEventResultType::Disallow(_) => (),
+                        MaoEventResultType::OverrideBasicRule(_)
+                        | MaoEventResultType::ExecuteBeforeTurnChange(_)
+                        | MaoEventResultType::ExecuteAfterTurnChange(_) => {
+                            not_ignored.push(callback_res)
+                        }
+                    }
+                }
+            }
+            return Ok(Some(if !not_ignored.is_empty() {
+                MaoActionResult::TurnAction {
+                    result: not_ignored,
+                    event: previous_event.to_owned(),
+                }
+            } else {
+                MaoActionResult::Nothing
+            }));
+        }
+        Ok(None)
+    }
+
     /// Finish the turn of player
     ///
     /// this function will call [`Self::on_event`] with [`MaoEvent::EndPlayerTurn`]
@@ -831,7 +887,7 @@ impl MaoInternal {
                         match &result.res_type {
                             MaoEventResultType::Ignored => (),
                             MaoEventResultType::Disallow(d) => {
-                                d.print_warning();
+                                d.print_warning(ui.clone())?;
                             }
                             _ => values.push(result.to_owned()),
                         }
@@ -899,56 +955,11 @@ impl MaoInternal {
         let event =
             MaoEvent::PlayedCardEvent(CardEvent::new(card.to_owned(), player_index, stack_index));
         let res = mao.on_event(&event)?;
-
-        if !res.iter().all(|r| match r.res_type {
-            MaoEventResultType::Ignored => true,
-            _ => false,
-        }) {
-            // one rule did not ignored it
-            let mut not_ignored = Vec::new();
-            for mao_res in &res {
-                match &mao_res.res_type {
-                    MaoEventResultType::Disallow(disallow) => {
-                        disallow.print_warning();
-                        match disallow.penality {
-                            Some(func) => func(mao, player_index)?,
-                            None => mao.give_card_to_player(player_index, None, ui.clone())?,
-                        }
-                    }
-                    MaoEventResultType::Ignored => (),
-                    MaoEventResultType::OverrideBasicRule(_)
-                    | MaoEventResultType::ExecuteBeforeTurnChange(_)
-                    | MaoEventResultType::ExecuteAfterTurnChange(_) => {
-                        not_ignored.push(mao_res.to_owned())
-                    }
-                }
-            }
-
-            for mao_res in &res {
-                if let Some(func) = mao_res.other_rules_callback {
-                    let callback_res = func(mao, &event, &not_ignored)?;
-                    match callback_res.res_type {
-                        MaoEventResultType::Ignored | MaoEventResultType::Disallow(_) => (),
-                        MaoEventResultType::OverrideBasicRule(_)
-                        | MaoEventResultType::ExecuteBeforeTurnChange(_)
-                        | MaoEventResultType::ExecuteAfterTurnChange(_) => {
-                            not_ignored.push(callback_res)
-                        }
-                    }
-                }
-            }
-            return Ok(if !not_ignored.is_empty() {
-                MaoActionResult::TurnAction {
-                    result: not_ignored,
-                    event: event.to_owned(),
-                }
-            } else {
-                MaoActionResult::Nothing
-            });
+        if let Some(r) = mao.propagate_on_event_results(player_index, &event, &res, ui.clone())? {
+            return Ok(r);
         }
 
         // no interactions from external rules
-
         // check from official rules
         if mao.can_play(
             player_index,
@@ -959,7 +970,7 @@ impl MaoInternal {
             // player cannot play
             match mao.get_specific_stacks(&[StackType::Drawable]).first() {
                 Some((stack_index, _)) => {
-                    mao.give_card_to_player(player_index, Some(*stack_index), ui)?
+                    mao.give_card_to_player(player_index, Some(*stack_index), ui.clone())?
                 } // TODO
                 None => {
                     return Err(Error::NoStackAvailable {
@@ -969,11 +980,11 @@ impl MaoInternal {
                 }
             }
             let player = mao.players.get(player_index).unwrap();
-            println!(
+            ui.lock().unwrap().show_information(&format!(
                 "{}, as penality you took one card, you cannot play this card : \n{}",
                 player.get_pseudo(),
                 card.to_string()
-            );
+            ))?;
             player.print_self_cards(None, None)?;
         } else {
             // player can play

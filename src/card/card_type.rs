@@ -10,8 +10,8 @@ pub enum CardType {
 }
 
 impl CardType {
+    // Returns a one or two character string for the card graphics
     pub fn to_card_string(&self) -> String {
-        // returns a one or two character string for the card graphics
         match self {
             CardType::Common(color_type) => color_type.to_card_string(),
             CardType::Rule => "♯".to_string(), // trouver un caracter de rêgle (l'outil pour mesurer) à mettre à la place

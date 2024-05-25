@@ -1,6 +1,10 @@
 use std::io::Write;
 
-use crate::{card::Card, error::Error, stack::stack_property::StackProperty};
+use crate::{
+    card::{self, Card},
+    error::Error,
+    stack::stack_property::StackProperty,
+};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct Player {
@@ -42,7 +46,7 @@ impl Player {
         card_width: Option<usize>,
     ) -> Result<(), Error> {
         // TODO show hidden card (back)
-        let card_width = card_width.unwrap_or(9);
+        let card_width = card_width.unwrap_or(card::CARD_WIDTH as usize);
         let elevated_index = elevated_index.unwrap_or(self.hand.len());
         let lines: Vec<Vec<String>> = self
             .hand
