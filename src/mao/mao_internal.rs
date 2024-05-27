@@ -638,7 +638,7 @@ impl MaoInternal {
                     MaoEventResultType::Disallow(disallow) => {
                         disallow.print_warning(ui.clone())?;
                         match disallow.penality {
-                            Some(func) => func(self, player_index)?,
+                            Some(func) => func(self, player_index, ui.clone())?,
                             None => self.give_card_to_player(player_index, None, ui.clone())?,
                         }
                     }
@@ -921,36 +921,12 @@ impl MaoInternal {
     pub fn player_plays_card(
         mao: &mut MaoInternal,
         player_index: usize,
+        card_index: usize,
+        stack_index: Option<usize>,
         ui: Arc<Mutex<dyn UiMaoTrait>>,
     ) -> anyhow::Result<MaoActionResult> {
-        // getting player move
-        let mut stack_index: Option<usize> = Some(
-            match ui.lock().unwrap().request_stack_choice(
-                mao,
-                RequestData::new(RequestDataEnum::StackChoice {
-                    stack_types: vec![StackType::Playable],
-                }),
-            )? {
-                RequestResponse::StackChoice(i) => i,
-                _ => return Err(Error::InvalidRequestResponse.into()),
-            },
-        );
-        if stack_index.as_ref().unwrap() == &0 {
-            stack_index = None;
-        }
-        let card_index = match ui.lock().unwrap().request_card_choice(
-            mao,
-            RequestData::new(RequestDataEnum::PlayerCardChoice {
-                player_chooser_index: player_index,
-                among_other_players: None,
-            }),
-        )? {
-            RequestResponse::PlayerCardChoice { card_index, .. } => card_index,
-            _ => return Err(Error::InvalidRequestResponse.into()),
-        };
         let player = mao.get_players().get(player_index).unwrap();
         let card = player.get_cards().get(card_index).unwrap().to_owned();
-
         // calling rules
         let event =
             MaoEvent::PlayedCardEvent(CardEvent::new(card.to_owned(), player_index, stack_index));
@@ -985,7 +961,6 @@ impl MaoInternal {
                 player.get_pseudo(),
                 card.to_string()
             ))?;
-            player.print_self_cards(None, None)?;
         } else {
             // player can play
             // push card into played stack
@@ -1003,6 +978,40 @@ impl MaoInternal {
             result: vec![],
             event,
         })
+    }
+
+    pub fn player_plays_card_requesting(
+        mao: &mut MaoInternal,
+        player_index: usize,
+        ui: Arc<Mutex<dyn UiMaoTrait>>,
+    ) -> anyhow::Result<MaoActionResult> {
+        // getting player move
+        let mut stack_index: Option<usize> = Some(
+            match ui.lock().unwrap().request_stack_choice(
+                mao,
+                RequestData::new(RequestDataEnum::StackChoice {
+                    stack_types: vec![StackType::Playable],
+                }),
+            )? {
+                RequestResponse::StackChoice(i) => i,
+                _ => return Err(Error::InvalidRequestResponse.into()),
+            },
+        );
+        if stack_index.as_ref().unwrap() == &0 {
+            stack_index = None;
+        }
+        let card_index = match ui.lock().unwrap().request_card_choice(
+            mao,
+            RequestData::new(RequestDataEnum::PlayerCardChoice {
+                player_chooser_index: player_index,
+                among_other_players: None,
+            }),
+        )? {
+            RequestResponse::PlayerCardChoice { card_index, .. } => card_index,
+            _ => return Err(Error::InvalidRequestResponse.into()),
+        };
+
+        MaoInternal::player_plays_card(mao, player_index, card_index, stack_index, ui)
     }
 
     pub fn player_giveup_turn(

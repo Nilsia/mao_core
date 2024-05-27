@@ -43,6 +43,10 @@ impl MaoCore {
     pub fn mao_mut(&mut self) -> &mut MaoInternal {
         &mut self.mao
     }
+
+    pub fn ui(&self) -> Arc<Mutex<dyn UiMaoTrait>> {
+        self.ui.clone()
+    }
 }
 
 impl MaoCore {

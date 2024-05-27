@@ -7,7 +7,8 @@ use crate::{
 
 use super::MaoEvent;
 
-pub type PenalityCallbackFunction = fn(&mut MaoInternal, player_index: usize) -> anyhow::Result<()>;
+pub type PenalityCallbackFunction =
+    fn(&mut MaoInternal, player_index: usize, Arc<Mutex<dyn UiMaoTrait>>) -> anyhow::Result<()>;
 pub type OtherRulesCallbackFunction = fn(
     &mut MaoInternal,
     previous_event: &MaoEvent,
@@ -37,7 +38,11 @@ impl Disallow {
     }
 }
 
-pub type CallbackFuntion = fn(mao: &mut MaoInternal) -> anyhow::Result<()>;
+pub type CallbackFuntion = fn(
+    mao: &mut MaoInternal,
+    player_size: usize,
+    ui: Arc<Mutex<dyn UiMaoTrait>>,
+) -> anyhow::Result<()>;
 
 /// This structure is affilied to a [`MaoEventResult`]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
