@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     error::Error,
@@ -10,20 +10,24 @@ use crate::{
 
 use super::MaoEvent;
 
-pub type PenalityCallbackFunction =
-    fn(&mut MaoInternal, player_index: usize, DynMaoArc) -> anyhow::Result<()>;
-pub type OtherRulesCallbackFunction = fn(
-    &mut MaoInternal,
-    previous_event: &MaoEvent,
-    results: &[&MaoEventResult],
-) -> anyhow::Result<MaoEventResult>;
+/// Arguments: (mao, player_index, ui)
+pub type PenalityCallbackFunction = fn(&mut MaoInternal, usize, DynMaoArc) -> anyhow::Result<()>;
+/// Arguments: (mao, previous event, results_of_the_previous_event)
+pub type OtherRulesCallbackFunction =
+    fn(&mut MaoInternal, &MaoEvent, &[&MaoEventResult]) -> anyhow::Result<MaoEventResult>;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct Disallow {
     pub rule: String,
     pub msg: String,
     pub penality: Option<PenalityCallbackFunction>,
 }
+
+impl PartialEq for Disallow {
+    fn eq(&self, other: &Self) -> bool {
+        self.rule == other.rule && self.msg == other.msg
+    }
+}
+
 impl Disallow {
     pub fn new(rule: String, msg: String, penality: Option<PenalityCallbackFunction>) -> Self {
         Self {
@@ -33,23 +37,15 @@ impl Disallow {
         }
     }
 
-    pub async fn print_warning(&self, ui: Arc<dyn UiMaoTrait>) -> Result<(), Error> {
-        Ok(ui
-            .show_information(&format!(
-                "You are not allowed to do this :{} ({})",
-                self.msg, self.rule,
-            ))
-            .await?)
+    pub fn print_warning(&self, ui: Arc<dyn UiMaoTrait>) -> Result<(), Error> {
+        Ok(ui.show_information(&format!(
+            "You are not allowed to do this :{} ({})",
+            self.msg, self.rule,
+        ))?)
     }
 }
-type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
-pub type CallbackFunction = Box<
-    dyn for<'a> Fn(
-        &'a mut MaoInternal,
-        usize,
-        DynMaoArc,
-    ) -> BoxFuture<'a, anyhow::Result<MaoActionResult>>,
->;
+pub type CallbackFunction =
+    fn(&mut MaoInternal, usize, DynMaoArc) -> anyhow::Result<MaoActionResult>;
 
 /// This structure is affilied to a [`MaoEventResult`]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
@@ -98,7 +94,7 @@ pub struct LightMaoEventResult {
     pub res_type: MaoEventResultType,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+#[derive(PartialEq)]
 pub enum LightMaoEventResultType {
     Ignored,
     Disallow(Disallow),

@@ -1,7 +1,13 @@
 use core::result::Result;
 
 use rand::{seq::SliceRandom, thread_rng};
-use std::{fs, ops::DerefMut, path::PathBuf, sync::Arc};
+use std::{
+    fs::{self, OpenOptions},
+    io::Write,
+    ops::DerefMut,
+    path::PathBuf,
+    sync::Arc,
+};
 
 use crate::{
     card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
@@ -16,6 +22,14 @@ use crate::{
     rule::Rule,
     stack::{stack_property::StackProperty, stack_type::StackType, Stack},
 };
+pub fn log(msg: &[u8]) -> anyhow::Result<()> {
+    let mut file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open("log.log")?;
+    file.write_all(msg)?;
+    Ok(())
+}
 
 use super::UiMaoTrait;
 
@@ -303,7 +317,7 @@ impl MaoInternal {
     /// # Errors
     ///
     /// This function will return an error if it is not possible to retrieve the player's choice
-    async fn draw_stack_getter(
+    fn draw_stack_getter(
         mao: &mut MaoInternal,
         stacks_index: &[usize],
         ui: DynMaoArc,
@@ -316,15 +330,12 @@ impl MaoInternal {
             1 => stacks_index.first().unwrap().to_owned(),
             _ => stacks_index
                 .get(
-                    match ui
-                        .request_stack_choice(
-                            mao,
-                            RequestData::new(RequestDataEnum::StackChoice {
-                                stack_types: vec![StackType::Drawable],
-                            }),
-                        )
-                        .await?
-                    {
+                    match ui.request_stack_choice(
+                        mao,
+                        RequestData::new(RequestDataEnum::StackChoice {
+                            stack_types: vec![StackType::Drawable],
+                        }),
+                    )? {
                         RequestResponse::StackChoice(i) => i,
                         _ => return Err(Error::InvalidRequestResponse),
                     },
@@ -462,7 +473,7 @@ impl MaoInternal {
     /// + there is not available drawable stacks,
     /// + cannot refill an empty drawable stack
     /// + the player index is invalid
-    pub async fn give_card_to_player(
+    pub fn give_card_to_player(
         &mut self,
         player_index: usize,
         stack_index: Option<usize>,
@@ -479,15 +490,12 @@ impl MaoInternal {
                     }
                     1 => drawable_stacks.first().unwrap().0,
                     _ => {
-                        match ui
-                            .request_stack_choice(
-                                self,
-                                RequestData::new(RequestDataEnum::StackChoice {
-                                    stack_types: vec![StackType::Drawable],
-                                }),
-                            )
-                            .await?
-                        {
+                        match ui.request_stack_choice(
+                            self,
+                            RequestData::new(RequestDataEnum::StackChoice {
+                                stack_types: vec![StackType::Drawable],
+                            }),
+                        )? {
                             RequestResponse::StackChoice(i) => i,
                             _ => return Err(Error::InvalidRequestResponse),
                         }
@@ -627,7 +635,7 @@ impl MaoInternal {
     /// # Errors
     ///
     /// This function will return an error if .
-    pub async fn propagate_on_event_results_and_execute(
+    pub fn propagate_on_event_results_and_execute(
         &mut self,
         player_index: usize,
         previous_event: &MaoEvent,
@@ -643,12 +651,11 @@ impl MaoInternal {
             for mao_res in event_results {
                 match &mao_res.res_type {
                     MaoEventResultType::Disallow(disallow) => {
-                        disallow.print_warning(Arc::clone(&ui)).await?;
-                        match disallow.penality {
+                        disallow.print_warning(Arc::clone(&ui))?;
+                        match disallow.penality.as_ref() {
                             Some(func) => func(self, player_index, Arc::clone(&ui))?,
                             None => {
-                                self.give_card_to_player(player_index, None, Arc::clone(&ui))
-                                    .await?
+                                self.give_card_to_player(player_index, None, Arc::clone(&ui))?
                             }
                         }
                     }
@@ -659,14 +666,12 @@ impl MaoInternal {
                 }
             }
 
-            let results_on_results = event_results
-                .iter()
-                .flat_map(|res| {
-                    res.other_rules_callback
-                        .map(|func| func(self, &previous_event, &not_ignored))
-                })
-                .flatten()
-                .collect::<Vec<MaoEventResult>>();
+            let mut results_on_results = Vec::new();
+            for res in event_results {
+                if let Some(func) = res.other_rules_callback.as_ref() {
+                    results_on_results.push(func(self, &previous_event, &not_ignored)?);
+                }
+            }
             for res in &results_on_results {
                 match res.res_type {
                     MaoEventResultType::Ignored | MaoEventResultType::Disallow(_) => (),
@@ -703,13 +708,13 @@ impl MaoInternal {
                 );
 
                 for bef in &before {
-                    bef(self, player_index, Arc::clone(&ui)).await?;
+                    bef(self, player_index, Arc::clone(&ui))?;
                 }
                 if !overrided {
                     self.next_player(player_index, previous_event);
                 }
                 for aft in &after {
-                    aft(self, player_index, ui.clone()).await?;
+                    aft(self, player_index, ui.clone())?;
                 }
             }
             return Ok(true);
@@ -876,7 +881,7 @@ impl MaoInternal {
 
 // players' actions
 impl MaoInternal {
-    pub async fn player_draws_card(
+    pub fn player_draws_card(
         mao: &mut MaoInternal,
         player_index: usize,
         ui: DynMaoArc,
@@ -891,11 +896,11 @@ impl MaoInternal {
         let mut nb_cards = 1;
         // TODO ask if can draw as much cards
 
-        let mut stack_index = Self::draw_stack_getter(mao, &stacks_index, Arc::clone(&ui))
-            .await?
-            .ok_or(Error::NoStackAvailable {
+        let mut stack_index = Self::draw_stack_getter(mao, &stacks_index, Arc::clone(&ui))?.ok_or(
+            Error::NoStackAvailable {
                 stacks: vec![StackType::Drawable],
-            })?;
+            },
+        )?;
         let mut stack = mao.get_stacks().get(stack_index).unwrap();
 
         // TODO handle multiple cards draw
@@ -920,28 +925,24 @@ impl MaoInternal {
                         mao.update_turn(PlayerTurnChange::Update(PlayerTurnUpdater::Update(1)));
                     }
                     // all rules have ignored the event
-                    mao.give_card_to_player(player_index, Some(stack_index), Arc::clone(&ui))
-                        .await?;
+                    mao.give_card_to_player(player_index, Some(stack_index), Arc::clone(&ui))?;
                 } else {
                     let mut values: Vec<&MaoEventResult> = Vec::new();
                     for result in &res {
                         match &result.res_type {
                             MaoEventResultType::Ignored => (),
                             MaoEventResultType::Disallow(d) => {
-                                d.print_warning(Arc::clone(&ui)).await?;
+                                d.print_warning(Arc::clone(&ui))?;
                             }
                             _ => values.push(result),
                         }
                     }
-                    if mao
-                        .propagate_on_event_results_and_execute(
-                            player_index,
-                            &event,
-                            &values,
-                            Arc::clone(&ui),
-                        )
-                        .await?
-                    {}
+                    if mao.propagate_on_event_results_and_execute(
+                        player_index,
+                        &event,
+                        &values,
+                        Arc::clone(&ui),
+                    )? {}
                     if !values.is_empty() {
                         return Ok(());
                     }
@@ -955,17 +956,17 @@ impl MaoInternal {
                 .iter()
                 .map(|v| v.0)
                 .collect();
-            stack_index = Self::draw_stack_getter(mao, &stacks_index, ui.clone())
-                .await?
-                .ok_or(Error::NoStackAvailable {
+            stack_index = Self::draw_stack_getter(mao, &stacks_index, ui.clone())?.ok_or(
+                Error::NoStackAvailable {
                     stacks: vec![StackType::Drawable],
-                })?;
+                },
+            )?;
             stack = mao.get_stacks().get(stack_index).unwrap();
         }
         Ok(())
     }
 
-    pub async fn player_plays_card(
+    pub fn player_plays_card(
         mao: &mut MaoInternal,
         player_index: usize,
         card_index: usize,
@@ -978,15 +979,12 @@ impl MaoInternal {
         let event =
             MaoEvent::PlayedCardEvent(CardEvent::new(card.to_owned(), player_index, stack_index));
         let res = mao.on_event(&event)?;
-        if mao
-            .propagate_on_event_results_and_execute(
-                player_index,
-                &event,
-                &res.iter().map(|v| v).collect::<Vec<&MaoEventResult>>(),
-                Arc::clone(&ui),
-            )
-            .await?
-        {
+        if mao.propagate_on_event_results_and_execute(
+            player_index,
+            &event,
+            &res.iter().map(|v| v).collect::<Vec<&MaoEventResult>>(),
+            Arc::clone(&ui),
+        )? {
             return Ok(());
         }
 
@@ -1001,8 +999,7 @@ impl MaoInternal {
             // player cannot play
             match mao.get_specific_stacks(&[StackType::Drawable]).first() {
                 Some((stack_index, _)) => {
-                    mao.give_card_to_player(player_index, Some(*stack_index), ui.clone())
-                        .await?
+                    mao.give_card_to_player(player_index, Some(*stack_index), ui.clone())?
                 } // TODO
                 None => {
                     return Err(Error::NoStackAvailable {
@@ -1016,8 +1013,7 @@ impl MaoInternal {
                 "{}, as penality you took one card, you cannot play this card : \n{}",
                 player.get_pseudo(),
                 card.to_string()
-            ))
-            .await?;
+            ))?;
         } else {
             // player can play
             // push card into played stack
@@ -1034,22 +1030,19 @@ impl MaoInternal {
         Ok(())
     }
 
-    pub async fn player_plays_card_requesting(
+    pub fn player_plays_card_requesting(
         mao: &mut MaoInternal,
         player_index: usize,
         ui: DynMaoArc,
     ) -> anyhow::Result<()> {
         // getting player move
         let mut stack_index: Option<usize> = Some(
-            match ui
-                .request_stack_choice(
-                    mao,
-                    RequestData::new(RequestDataEnum::StackChoice {
-                        stack_types: vec![StackType::Playable],
-                    }),
-                )
-                .await?
-            {
+            match ui.request_stack_choice(
+                mao,
+                RequestData::new(RequestDataEnum::StackChoice {
+                    stack_types: vec![StackType::Playable],
+                }),
+            )? {
                 RequestResponse::StackChoice(i) => i,
                 _ => return Err(Error::InvalidRequestResponse.into()),
             },
@@ -1057,29 +1050,21 @@ impl MaoInternal {
         if stack_index.as_ref().unwrap() == &0 {
             stack_index = None;
         }
-        let card_index = match ui
-            .request_card_choice(
-                mao,
-                RequestData::new(RequestDataEnum::PlayerCardChoice {
-                    player_chooser_index: player_index,
-                    among_other_players: None,
-                }),
-            )
-            .await?
-        {
+        let card_index = match ui.request_card_choice(
+            mao,
+            RequestData::new(RequestDataEnum::PlayerCardChoice {
+                player_chooser_index: player_index,
+                among_other_players: None,
+            }),
+        )? {
             RequestResponse::PlayerCardChoice { card_index, .. } => card_index,
             _ => return Err(Error::InvalidRequestResponse.into()),
         };
 
         MaoInternal::player_plays_card(mao, player_index, card_index, stack_index, Arc::clone(&ui))
-            .await
     }
 
-    pub async fn player_giveup_turn(
-        _: &mut MaoInternal,
-        _: usize,
-        _: DynMaoArc,
-    ) -> anyhow::Result<()> {
+    pub fn player_giveup_turn(_: &mut MaoInternal, _: usize, _: DynMaoArc) -> anyhow::Result<()> {
         Ok(())
     }
 
