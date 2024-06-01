@@ -1,18 +1,21 @@
-use std::sync::{Arc, Mutex};
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
     error::Error,
-    mao::{mao_internal::MaoInternal, UiMaoTrait},
+    mao::{
+        mao_internal::{DynMaoArc, MaoActionResult, MaoInternal},
+        UiMaoTrait,
+    },
 };
 
 use super::MaoEvent;
 
 pub type PenalityCallbackFunction =
-    fn(&mut MaoInternal, player_index: usize, Arc<Mutex<dyn UiMaoTrait>>) -> anyhow::Result<()>;
+    fn(&mut MaoInternal, player_index: usize, DynMaoArc) -> anyhow::Result<()>;
 pub type OtherRulesCallbackFunction = fn(
     &mut MaoInternal,
     previous_event: &MaoEvent,
-    results: &[MaoEventResult],
+    results: &[&MaoEventResult],
 ) -> anyhow::Result<MaoEventResult>;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
@@ -30,19 +33,23 @@ impl Disallow {
         }
     }
 
-    pub fn print_warning(&self, ui: Arc<Mutex<dyn UiMaoTrait>>) -> Result<(), Error> {
-        Ok(ui.lock().unwrap().show_information(&format!(
-            "You are not allowed to do this :{} ({})",
-            self.msg, self.rule,
-        ))?)
+    pub async fn print_warning(&self, ui: Arc<dyn UiMaoTrait>) -> Result<(), Error> {
+        Ok(ui
+            .show_information(&format!(
+                "You are not allowed to do this :{} ({})",
+                self.msg, self.rule,
+            ))
+            .await?)
     }
 }
-
-pub type CallbackFuntion = fn(
-    mao: &mut MaoInternal,
-    player_size: usize,
-    ui: Arc<Mutex<dyn UiMaoTrait>>,
-) -> anyhow::Result<()>;
+type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
+pub type CallbackFunction = Box<
+    dyn for<'a> Fn(
+        &'a mut MaoInternal,
+        usize,
+        DynMaoArc,
+    ) -> BoxFuture<'a, anyhow::Result<MaoActionResult>>,
+>;
 
 /// This structure is affilied to a [`MaoEventResult`]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
@@ -53,7 +60,6 @@ pub enum Necessary {
     ImportedRule { necessary: bool, rule_name: String },
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct MaoEventResult {
     /// The necessity of the event
     pub necessary: Necessary,
@@ -74,21 +80,19 @@ impl MaoEventResult {
 }
 
 /// The type of the [`MaoEventResult`]
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum MaoEventResultType {
     /// The event has been ignored
     Ignored,
     /// The event has been disallowed by the rule
     Disallow(Disallow),
     /// The event will override basic rules, the function should modify itself the player turn, the basics rules won't be modified besides
-    OverrideBasicRule(CallbackFuntion),
+    OverrideBasicRule(CallbackFunction),
     /// Contains a function which will modified the player turn but not override the basic change turn, this function will be executed before the basic change turn
-    ExecuteBeforeTurnChange(CallbackFuntion),
+    ExecuteBeforeTurnChange(CallbackFunction),
     /// Contains a function which will modified the player turn but not override the basic change turn, this function will be executed before the basic change turn
-    ExecuteAfterTurnChange(CallbackFuntion),
+    ExecuteAfterTurnChange(CallbackFunction),
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct LightMaoEventResult {
     pub necessary: bool,
     pub res_type: MaoEventResultType,
