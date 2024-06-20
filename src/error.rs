@@ -1,4 +1,4 @@
-use crate::stack::stack_type::StackType;
+use crate::{mao::node_state::PlayerAction, stack::stack_type::StackType};
 
 #[derive(Debug)]
 pub struct DmDescription(pub(crate) String);
@@ -47,6 +47,10 @@ pub enum Error {
     },
     MissingRequestCallbacks(Vec<&'static str>),
     InvalidRequestResponse,
+    InvalidMaoInteraction {
+        expected: Vec<PlayerAction>,
+        received: Vec<PlayerAction>,
+    },
 }
 
 impl Error {
@@ -115,6 +119,10 @@ impl std::fmt::Display for Error {
                 keys.join(", ")
             ),
             Error::InvalidRequestResponse => write!(f, "Invalid Request Reponse"),
+            Error::InvalidMaoInteraction { expected, received } => write!(
+                f,
+                "Invalid mao interactions: \nexpected: {expected:?}\nreceived: {received:?}"
+            ),
         }
     }
 }

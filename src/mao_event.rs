@@ -33,6 +33,8 @@ pub enum MaoEvent {
     GameStart,
     /// Released when a player has finished its turn
     EndPlayerTurn { events: Vec<MaoEvent> },
+    /// Released when a player is going to take a penality
+    PlayerPenality { player_target: usize },
     /// Released when verifying the validity of the rules (only called at inialization)
     VerifyEvent,
 }
@@ -49,6 +51,7 @@ impl MaoEvent {
             MaoEvent::GameStart => None,
             MaoEvent::EndPlayerTurn { .. } => None,
             MaoEvent::VerifyEvent => unreachable!("verify event"),
+            MaoEvent::PlayerPenality { .. } => None,
         }
     }
 }

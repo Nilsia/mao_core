@@ -9,6 +9,12 @@ pub enum CardType {
     Jocker { desc: String, color: CardColor },
 }
 
+impl Default for CardType {
+    fn default() -> Self {
+        Self::Common(CommonCardType::Spade)
+    }
+}
+
 impl CardType {
     // Returns a one or two character string for the card graphics
     pub fn to_card_string(&self) -> String {

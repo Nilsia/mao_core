@@ -11,7 +11,7 @@ pub const CARD_WIDTH: u16 = 9;
 pub const RED: &str = "[31m";
 pub const RESET: &str = "[0m";
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Card {
     value: CardValue,
     sign: CardType,
@@ -80,6 +80,7 @@ impl Card {
         Self::card_with_word("empty")
     }
 
+    /// Returns a card descriptor just valud and sign in one line
     pub fn to_string_light(&self) -> String {
         self.value.to_card_string() + " " + &self.sign.to_card_string()
     }

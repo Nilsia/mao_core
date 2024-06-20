@@ -5,6 +5,12 @@ pub enum CardValue {
     PlusInfinity,
 }
 
+impl Default for CardValue {
+    fn default() -> Self {
+        Self::Number(1)
+    }
+}
+
 impl CardValue {
     /// Returns a one or two character string for the card graphics
     pub fn to_card_string(&self) -> String {

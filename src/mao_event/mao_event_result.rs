@@ -1,21 +1,14 @@
-use std::sync::Arc;
-
-use crate::{
-    error::Error,
-    mao::{
-        mao_internal::{DynMaoArc, MaoActionResult, MaoInternal},
-        UiMaoTrait,
-    },
-};
+use crate::mao::mao_internal::{MaoActionResult, MaoInternal};
 
 use super::MaoEvent;
 
-/// Arguments: (mao, player_index, ui)
-pub type PenalityCallbackFunction = fn(&mut MaoInternal, usize, DynMaoArc) -> anyhow::Result<()>;
+/// Arguments: (mao, player_index)
+pub type PenalityCallbackFunction = fn(&mut MaoInternal, usize) -> anyhow::Result<()>;
 /// Arguments: (mao, previous event, results_of_the_previous_event)
 pub type OtherRulesCallbackFunction =
     fn(&mut MaoInternal, &MaoEvent, &[&MaoEventResult]) -> anyhow::Result<MaoEventResult>;
 
+#[derive(Clone, Debug)]
 pub struct Disallow {
     pub rule: String,
     pub msg: String,
@@ -37,15 +30,14 @@ impl Disallow {
         }
     }
 
-    pub fn print_warning(&self, ui: Arc<dyn UiMaoTrait>) -> Result<(), Error> {
-        Ok(ui.show_information(&format!(
-            "You are not allowed to do this :{} ({})",
-            self.msg, self.rule,
-        ))?)
-    }
+    // pub fn print_warning(&self, ui: Arc<dyn UiMaoTrait>) -> Result<(), Error> {
+    //     Ok(ui.show_information(&format!(
+    //         "You are not allowed to do this :{} ({})",
+    //         self.msg, self.rule,
+    //     ))?)
+    // }
 }
-pub type CallbackFunction =
-    fn(&mut MaoInternal, usize, DynMaoArc) -> anyhow::Result<MaoActionResult>;
+pub type CallbackFunction = fn(&mut MaoInternal, usize) -> anyhow::Result<MaoActionResult>;
 
 /// This structure is affilied to a [`MaoEventResult`]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
