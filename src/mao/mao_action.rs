@@ -21,6 +21,7 @@ impl std::fmt::Display for MaoInteraction {
                 PlayerAction::SelectPlayer => "Player",
                 PlayerAction::SelectPlayableStack => "PlayableStack",
                 PlayerAction::SelectDrawableStack => "DrawableStack",
+                PlayerAction::SelectDiscardableStack => "DiscardableStack",
             },
             self.index
                 .map_or("new".to_string(), |v| (v + 1).to_string())

@@ -25,6 +25,7 @@ pub enum PlayerAction {
     SelectPlayer,
     SelectPlayableStack,
     SelectDrawableStack,
+    SelectDiscardableStack,
 }
 
 impl std::fmt::Display for PlayerAction {
@@ -37,6 +38,7 @@ impl std::fmt::Display for PlayerAction {
                 PlayerAction::SelectPlayer => "player",
                 PlayerAction::SelectPlayableStack => "playable stack",
                 PlayerAction::SelectDrawableStack => "drawable stack",
+                PlayerAction::SelectDiscardableStack => "discardable stack",
             }
         )
     }

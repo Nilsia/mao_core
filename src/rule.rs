@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use libloading::{Library, Symbol};
+use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::{
     error::Error,
@@ -9,18 +9,28 @@ use crate::{
     VERSION,
 };
 
-type OnEventFunctionSignature = fn(&MaoEvent, &mut MaoInternal) -> anyhow::Result<MaoEventResult>;
-type VersionGetterFunction = fn() -> String;
+type OnEventFunctionSignature =
+    fn(event: &MaoEvent, mao: &mut MaoInternal) -> anyhow::Result<MaoEventResult>;
 
-#[derive(Debug)]
+#[derive(WrapperApi)]
+struct A {
+    a: fn(event: &MaoEvent, mao: &mut MaoInternal) -> anyhow::Result<MaoEventResult>,
+}
+
+#[derive(WrapperApi)]
+pub struct Library {
+    on_event: fn(event: &MaoEvent, mao: &mut MaoInternal) -> anyhow::Result<MaoEventResult>,
+    get_version: fn() -> String,
+}
+
 pub struct Rule {
-    lib: Library,
+    lib: Container<Library>,
     name: String,
     path: PathBuf,
 }
 
 impl Rule {
-    pub fn new(lib: Library, name: String) -> Self {
+    pub fn new(lib: Container<Library>, name: String) -> Self {
         Self {
             lib,
             path: PathBuf::from(&name),
@@ -38,12 +48,12 @@ impl Rule {
         }
     }
 
-    pub unsafe fn get_on_event_func(&self) -> Result<Symbol<OnEventFunctionSignature>, Error> {
-        unsafe { Ok(self.lib.get::<OnEventFunctionSignature>(b"on_event\0")?) }
+    pub unsafe fn get_on_event_func(&self) -> Result<OnEventFunctionSignature, Error> {
+        Ok(self.lib.on_event)
     }
 
     pub(crate) unsafe fn get_version(&self) -> Result<String, Error> {
-        unsafe { Ok(self.lib.get::<VersionGetterFunction>(b"get_version\0")?()) }
+        Ok((self.lib.get_version)())
     }
 
     pub fn is_valid_rule(&self, mao: &mut MaoInternal) -> Result<(), Error> {
@@ -58,7 +68,7 @@ impl Rule {
                         false => Err(Error::RuleNotValid { desc:  crate::error::DmDescription(format!("versions are incompatible, please consider recompiling your rule (mao_library: {}, rule: {})", VERSION, version)) }),
                     }
                 }
-                Err(e) => Err(Error::LibLoading {
+                Err(e) => Err(Error::DlOpen2 {
                     desc: crate::error::DmDescription(e.to_string()),
                 }),
             }
@@ -86,6 +96,11 @@ impl TryFrom<&str> for Rule {
     type Error = Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        unsafe { Ok(Self::new(Library::new(value)?, value.to_owned())) }
+        unsafe {
+            Ok(Self::new(
+                Container::load("./".to_string() + value)?,
+                value.to_owned(),
+            ))
+        }
     }
 }

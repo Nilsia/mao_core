@@ -24,6 +24,10 @@ impl Stack {
         }
     }
 
+    pub fn visible(&self) -> bool {
+        self.visible
+    }
+
     pub fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
     }
@@ -59,6 +63,8 @@ impl Stack {
         self.cards.pop()
     }
 
+    /// Returns the top card of the stack as a graphical string
+    /// the returned card can be either empty, backed or fronted
     pub fn top_string(&self) -> String {
         match self.top() {
             Some(card) => card.to_string_custom(self.visible),

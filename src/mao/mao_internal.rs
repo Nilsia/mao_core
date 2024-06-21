@@ -13,7 +13,7 @@ use crate::{
     config::Config,
     error::{DmDescription, Error},
     mao_event::{
-        card_event::{self, CardEvent},
+        card_event::CardEvent,
         mao_event_result::{CallbackFunction, Disallow, MaoEventResult, MaoEventResultType},
         MaoEvent, StackTarget,
     },
@@ -125,7 +125,6 @@ pub struct UiCallbacks {
     pub prompt_coords: fn() -> anyhow::Result<Coords>,
 }
 
-#[derive(Debug)]
 pub struct MaoInternal {
     available_rules: Vec<Rule>,
     activated_rules: Vec<Rule>,
@@ -138,10 +137,32 @@ pub struct MaoInternal {
     player_events: Vec<MaoEvent>,
     can_play_on_new_stack: bool,
     pub automaton: Automaton,
+    dealer: usize,
 }
 
 // getters and setters
 impl MaoInternal {
+    pub fn players_events(&self) -> &[MaoEvent] {
+        &self.player_events
+    }
+    pub fn dealer(&self) -> usize {
+        self.dealer
+    }
+    pub fn set_dealer(&mut self, dealer: usize) {
+        self.dealer = dealer;
+    }
+    pub fn common_penality_to_player(&mut self, player_index: usize) -> Result<(), Error> {
+        let card = self.draw_multiple_cards_unchosen(1)?.pop().unwrap();
+        let len = self.players.len();
+        match self.players.get_mut(player_index) {
+            Some(player) => {
+                player.get_cards_mut().push(card);
+                Ok(())
+            }
+            None => Err(Error::InvalidPlayerIndex { player_index, len }),
+        }
+    }
+
     fn correct_player_action(&self, expected: &[PlayerAction], datas: &[PlayerAction]) -> bool {
         if expected.len() != datas.len() {
             return false;
@@ -227,6 +248,7 @@ impl MaoInternal {
             true,
             vec![StackType::Playable],
         ));
+        stacks.push(Stack::new(vec![], true, vec![StackType::Discardable]));
 
         let actions = vec![
             vec![
@@ -234,7 +256,6 @@ impl MaoInternal {
                 NodeState::new(
                     MaoInteraction::new(None, PlayerAction::SelectPlayableStack),
                     Some(|player_index, mao, datas| {
-                        log(b"play a card");
                         MaoInternal::play_interaction(player_index, mao, datas)
                     }),
                 ),
@@ -242,7 +263,6 @@ impl MaoInternal {
             vec![NodeState::new(
                 MaoInteraction::new(None, PlayerAction::SelectDrawableStack),
                 Some(|player_index, mao, datas| {
-                    log(b"drawing a card\n");
                     MaoInternal::draw_interaction(player_index, mao, datas)
                 }),
             )],
@@ -251,7 +271,7 @@ impl MaoInternal {
         // s.verify()?;
         // verify that all rules are valid
         if let Err(e) = s.rules_valid() {
-            return Err(Error::LibLoading {
+            return Err(Error::DlOpen2 {
                 desc: DmDescription(
                     e.iter()
                         .map(|v| v.to_string())
@@ -312,11 +332,12 @@ impl MaoInternal {
             activated_rules: Vec::new(),
             stacks,
             players,
-            player_turn: 0,
+            player_turn: 1,
             turn: 1,
             player_events: Vec::new(),
             can_play_on_new_stack: false,
             automaton,
+            dealer: 0,
         }
     }
 
@@ -337,18 +358,6 @@ impl MaoInternal {
             self.common_penality_to_player(player_index)?;
         }
         Ok(())
-    }
-
-    pub fn common_penality_to_player(&mut self, player_index: usize) -> Result<(), Error> {
-        let card = self.draw_multiple_cards_unchosen(1)?.pop().unwrap();
-        let len = self.players.len();
-        match self.players.get_mut(player_index) {
-            Some(player) => {
-                player.get_cards_mut().push(card);
-                Ok(())
-            }
-            None => Err(Error::InvalidPlayerIndex { player_index, len }),
-        }
     }
 
     fn on_play_card(&mut self, card_event: CardEvent) -> Result<Vec<Disallow>, Error> {
@@ -412,7 +421,6 @@ impl MaoInternal {
                 card_event.card_index,
             )?;
             self.next_player(card_event.player_index, &event, false);
-            log(format!("player turn = {}\n", self.player_turn).as_bytes());
         }
 
         Ok(Vec::new())
@@ -1186,7 +1194,7 @@ impl MaoInternal {
         x
     }
     pub fn get_none_empty_drawable_stack(&self) -> Option<(usize, &Stack)> {
-        let mut stacks = self.get_drawable_stacks();
+        let stacks = self.get_drawable_stacks();
         let x = stacks
             .iter()
             .flat_map(|(i, stack)| {

@@ -3,11 +3,9 @@ pub mod mao_internal;
 pub mod node_state;
 
 use crate::{config::Config, error::Error};
-use std::fmt::Debug;
 
 use self::mao_internal::MaoInternal;
 
-#[derive(Debug)]
 pub struct MaoCore {
     mao: MaoInternal,
     // ui: Arc<dyn UiMaoTrait>,

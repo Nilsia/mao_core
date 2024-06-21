@@ -6,7 +6,7 @@ pub mod card_event;
 pub mod mao_event_result;
 
 /// Represents either the index of a [`Player`] or a [`Stack`] (implements [`StackProporty`])
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StackTarget {
     Player(usize),
     Stack(usize),

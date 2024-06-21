@@ -12,7 +12,7 @@ pub enum Error {
     InvalidConfig {
         desc: String,
     },
-    LibLoading {
+    DlOpen2 {
         desc: DmDescription,
     },
     IOError {
@@ -79,7 +79,7 @@ impl std::fmt::Display for Error {
                 write!(f, "There is not enough cards in the stack")
             }
             Error::InvalidConfig { ref desc } => write!(f, "{}", desc),
-            Error::LibLoading { desc } => write!(f, "{}", desc.0),
+            Error::DlOpen2 { desc } => write!(f, "{}", desc.0),
             Error::IOError { error } => write!(f, "{}", error),
             Error::RuleNotFound { desc } => write!(f, "{}", desc.0),
             Error::AnyhowError { error } => write!(f, "{}", error),
@@ -127,9 +127,9 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl From<libloading::Error> for Error {
-    fn from(value: libloading::Error) -> Self {
-        Self::LibLoading {
+impl From<dlopen2::Error> for Error {
+    fn from(value: dlopen2::Error) -> Self {
+        Self::DlOpen2 {
             desc: DmDescription(value.to_string()),
         }
     }
