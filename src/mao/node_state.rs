@@ -1,6 +1,6 @@
-use indextree::{Arena, NodeId};
+use indextree::{Arena, Node, NodeId};
 
-use crate::mao_event::mao_event_result::Disallow;
+use crate::{error::Error, mao_event::mao_event_result::Disallow, stack::stack_type::StackType};
 
 use super::{
     mao_action::MaoInteraction,
@@ -28,6 +28,16 @@ pub enum PlayerAction {
     SelectDiscardableStack,
 }
 
+impl From<StackType> for PlayerAction {
+    fn from(value: StackType) -> Self {
+        match value {
+            StackType::Playable => PlayerAction::SelectPlayableStack,
+            StackType::Drawable => PlayerAction::SelectDrawableStack,
+            StackType::Discardable => PlayerAction::SelectDiscardableStack,
+        }
+    }
+}
+
 impl std::fmt::Display for PlayerAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -51,14 +61,17 @@ pub type CallbackInteraction =
 #[derive(Debug, Clone, Default)]
 pub struct NodeState {
     pub action: MaoInteraction,
-    // information: String
-    // data: String,
+    pub rule: Option<String>,
     pub func: Option<CallbackInteraction>,
 }
 
 impl NodeState {
-    pub fn new(action: MaoInteraction, func: Option<CallbackInteraction>) -> Self {
-        Self { action, func }
+    pub fn new(
+        action: MaoInteraction,
+        func: Option<CallbackInteraction>,
+        rule: Option<String>,
+    ) -> Self {
+        Self { action, func, rule }
     }
 }
 
@@ -137,9 +150,69 @@ impl Automaton {
         None
     }
 
-    /// Advances to the next `action` if presents then returns the next actions which match to `action`
-    /// the returned actions can be the nodes (func = None)
-    /// or the executable actions (action != None), in that case the automaton is reseted
+    pub fn on_action_indexed(
+        &mut self,
+        interaction: MaoInteraction,
+        index: usize,
+    ) -> Result<MaoInteractionResult, Error> {
+        match self.on_action(interaction.to_owned()) {
+            MaoInteractionResult::Nodes(nodes) => {
+                match nodes.get(index) {
+                    Some(&node) => match node.func {
+                        Some(func) => {
+                            let mut interactions: Vec<MaoInteraction> = self
+                                .get_executed_actions()
+                                .iter()
+                                .map(|&v| v.action.to_owned())
+                                .collect();
+                            interactions.push(interaction);
+                            return Ok(MaoInteractionResult::Leaf { interactions, func });
+                        }
+                        // is a node so advance in it
+                        None => {
+                            self.current_state =
+                                self.get_node(interaction.action.to_owned()).unwrap();
+                            self.arena
+                                .get_mut(self.current_state)
+                                .unwrap()
+                                .get_mut()
+                                .action
+                                .index = interaction.index;
+                            return Ok(MaoInteractionResult::AdvancedNextState);
+                        }
+                    },
+                    // index is invalid
+                    None => Err(Error::OnMaoInteraction(format!(
+                        "Invalid index when retrieving action : {} out of {}",
+                        index,
+                        nodes.len()
+                    ))),
+                }
+            }
+            // not nodes
+            _ => Err(Error::OnMaoInteraction(format!(
+                "Provided index does not lead to multiple nodes"
+            ))),
+        }
+    }
+
+    fn put_node_at_end(nodes: &mut Vec<&NodeState>) {
+        if let Some(index) = nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.func.is_none())
+            .next()
+            .map(|v| v.0)
+        {
+            let len = nodes.len();
+            nodes.swap(index, len.saturating_sub(1));
+        }
+    }
+
+    /// Tries to advance to the next action, according to `interaction`
+    /// if there are multiple actions they are all returned
+    /// In case of returned leaves and uniq node, the node will always be at the end of the [`Vec`]
+    /// If there is only a node or a leaf, these one are returned
     pub fn on_action(&mut self, interaction: MaoInteraction) -> MaoInteractionResult {
         let nodes: Vec<NodeId> = self.search_type(interaction.action.to_owned());
         match nodes.len() {
@@ -175,13 +248,19 @@ impl Automaton {
                     MaoInteractionResult::AdvancedNextState
                 }
             },
-            _ => MaoInteractionResult::Nodes(
-                nodes
-                    .iter()
-                    .map(|id| self.arena.get(*id).unwrap().get())
-                    .collect(),
-            ),
+            _ => {
+                let mut nodes: Vec<&NodeState> = self.nodes_from_ids(&nodes);
+                Self::put_node_at_end(&mut nodes);
+                MaoInteractionResult::Nodes(nodes)
+            }
         }
+    }
+
+    fn nodes_from_ids(&self, nodes: &[NodeId]) -> Vec<&NodeState> {
+        nodes
+            .iter()
+            .map(|id| self.arena.get(*id).unwrap().get())
+            .collect()
     }
 
     pub fn reset(&mut self) {
@@ -241,10 +320,7 @@ impl Automaton {
 impl FromIterator<Vec<NodeState>> for Automaton {
     fn from_iter<T: IntoIterator<Item = Vec<NodeState>>>(iter: T) -> Self {
         let mut arena: Arena<NodeState> = Arena::new();
-        let root = arena.new_node(NodeState {
-            action: MaoInteraction::default(),
-            func: None,
-        });
+        let root = arena.new_node(NodeState::new(MaoInteraction::default(), None, None));
         let mut ret = Self {
             arena,
             current_state: root,

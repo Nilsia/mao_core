@@ -4,7 +4,7 @@ use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::{
     error::Error,
-    mao::mao_internal::MaoInternal,
+    mao::{mao_internal::MaoInternal, node_state::NodeState},
     mao_event::{mao_event_result::MaoEventResult, MaoEvent},
     VERSION,
 };
@@ -21,6 +21,7 @@ struct A {
 pub struct Library {
     on_event: fn(event: &MaoEvent, mao: &mut MaoInternal) -> anyhow::Result<MaoEventResult>,
     get_version: fn() -> String,
+    get_actions: Option<fn() -> Vec<Vec<NodeState>>>,
 }
 
 pub struct Rule {
@@ -48,30 +49,25 @@ impl Rule {
         }
     }
 
-    pub unsafe fn get_on_event_func(&self) -> Result<OnEventFunctionSignature, Error> {
-        Ok(self.lib.on_event)
+    pub fn get_on_event_func(&self) -> OnEventFunctionSignature {
+        self.lib.on_event
     }
 
-    pub(crate) unsafe fn get_version(&self) -> Result<String, Error> {
-        Ok((self.lib.get_version)())
+    pub(crate) fn get_version(&self) -> String {
+        (self.lib.get_version)()
+    }
+
+    pub(crate) fn get_actions(&self) -> Option<Vec<Vec<NodeState>>> {
+        self.lib.get_actions()
     }
 
     pub fn is_valid_rule(&self, mao: &mut MaoInternal) -> Result<(), Error> {
-        unsafe {
-            let event = MaoEvent::VerifyEvent;
-            match self.get_on_event_func() {
-                Ok(func) => {
-                    func(&event, mao).unwrap();
-                    let version = &self.get_version()?;
-                    match version == VERSION {
-                        true => Ok(()),
-                        false => Err(Error::RuleNotValid { desc:  crate::error::DmDescription(format!("versions are incompatible, please consider recompiling your rule (mao_library: {}, rule: {})", VERSION, version)) }),
-                    }
-                }
-                Err(e) => Err(Error::DlOpen2 {
-                    desc: crate::error::DmDescription(e.to_string()),
-                }),
-            }
+        let event = MaoEvent::VerifyEvent;
+        (self.get_on_event_func())(&event, mao).unwrap();
+        let version = &self.get_version();
+        match version == VERSION {
+            true => Ok(()),
+            false => Err(Error::RuleNotValid { desc:  crate::error::DmDescription(format!("versions are incompatible, please consider recompiling your rule (mao_library: {}, rule: {})", VERSION, version)) }),
         }
     }
 

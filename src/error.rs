@@ -51,6 +51,7 @@ pub enum Error {
         expected: Vec<PlayerAction>,
         received: Vec<PlayerAction>,
     },
+    OnMaoInteraction(String),
 }
 
 impl Error {
@@ -123,6 +124,7 @@ impl std::fmt::Display for Error {
                 f,
                 "Invalid mao interactions: \nexpected: {expected:?}\nreceived: {received:?}"
             ),
+            Error::OnMaoInteraction(s) => write!(f, "OnMaoInteraction: {}", s),
         }
     }
 }
