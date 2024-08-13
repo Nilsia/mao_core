@@ -37,6 +37,7 @@ pub struct Card {
     sign: CardType,
     rule: Option<String>,
     owner_can_see_it: bool,
+    other_can_see_it: bool,
 }
 
 impl Card {
@@ -46,6 +47,7 @@ impl Card {
             sign,
             rule,
             owner_can_see_it: true,
+            other_can_see_it: false,
         }
     }
 
@@ -67,6 +69,14 @@ impl Card {
 
     pub fn set_owner_can_see_it(&mut self, value: bool) {
         self.owner_can_see_it = value
+    }
+
+    pub fn other_can_see_it(&self) -> bool {
+        self.other_can_see_it
+    }
+
+    pub fn set_other_can_see_it(&mut self, value: bool) {
+        self.other_can_see_it = value
     }
 
     pub fn get_color(&self) -> CardColor {

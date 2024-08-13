@@ -1,11 +1,8 @@
-use indextree::{Arena, Node, NodeId};
+use indextree::{Arena, NodeId};
 
 use crate::{error::Error, mao_event::mao_event_result::Disallow, stack::stack_type::StackType};
 
-use super::{
-    mao_action::MaoInteraction,
-    mao_internal::{log, MaoInternal},
-};
+use super::{mao_action::MaoInteraction, mao_internal::MaoInternal};
 
 #[derive(Debug)]
 pub enum MaoInteractionResult<'a> {
@@ -90,14 +87,9 @@ impl std::fmt::Display for NodeState {
 
 impl Automaton {
     /// Returns the NodeId according to PartialEq from `self.current_state` if it exists
+    /// Only a node with no function is returned
     fn get_node(&self, action: PlayerAction) -> Option<NodeId> {
-        self.current_state
-            .children(&self.arena)
-            .filter(|id| {
-                let node_data = self.arena.get(*id).map(|node| node.get()).unwrap();
-                action == node_data.action.action && node_data.func.is_none()
-            })
-            .next()
+        self.get_node_of(self.current_state, action)
     }
 
     /// Returns the leaves' id (executable nodes) of this [`Automaton`]
@@ -314,6 +306,28 @@ impl Automaton {
         a.pop();
         a.reverse();
         a
+    }
+
+    fn get_node_of(&self, node_id: NodeId, action: PlayerAction) -> Option<NodeId> {
+        node_id
+            .children(&self.arena)
+            .filter(|id| {
+                let node_data = self.arena.get(*id).map(|node| node.get()).unwrap();
+                action == node_data.action.action && node_data.func.is_none()
+            })
+            .next()
+    }
+
+    pub fn path_exists(&self, path: &[PlayerAction]) -> bool {
+        let mut current = self.current_state;
+        for action in &path[..path.len().saturating_sub(1)] {
+            if let Some(node_id) = self.get_node_of(current, action.to_owned()) {
+                current = node_id;
+            } else {
+                return false;
+            }
+        }
+        return true;
     }
 }
 

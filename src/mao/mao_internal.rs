@@ -33,7 +33,7 @@ pub fn log(msg: &[u8]) -> anyhow::Result<()> {
         .create(true)
         .open("log.log")?;
     file.write_all(msg)?;
-    file.write(&[10])?;
+    file.write_all(&[10])?;
     Ok(())
 }
 
@@ -143,6 +143,9 @@ pub struct MaoInternal {
 
 // getters and setters
 impl MaoInternal {
+    pub fn available_rules(&self) -> &[Rule] {
+        &self.available_rules
+    }
     pub fn players_events(&self) -> &[MaoEvent] {
         &self.player_events
     }
