@@ -13,20 +13,18 @@ type OnEventFunctionSignature =
     fn(event: &MaoEvent, mao: &mut MaoInternal) -> anyhow::Result<MaoEventResult>;
 
 #[derive(WrapperApi)]
-struct A {
-    a: fn(event: &MaoEvent, mao: &mut MaoInternal) -> anyhow::Result<MaoEventResult>,
-}
-
-#[derive(WrapperApi)]
 pub struct Library {
     on_event: fn(event: &MaoEvent, mao: &mut MaoInternal) -> anyhow::Result<MaoEventResult>,
     get_version: fn() -> String,
     get_actions: Option<fn() -> Vec<Vec<NodeState>>>,
+    name: fn() -> &'static str,
+    description: Option<fn() -> &'static str>,
+    author: fn() -> Option<&'static str>,
 }
 
 pub struct Rule {
     lib: Container<Library>,
-    name: String,
+    light_filename: String,
     path: PathBuf,
 }
 
@@ -35,7 +33,7 @@ impl Rule {
         Self {
             lib,
             path: PathBuf::from(&name),
-            name: PathBuf::from(name)
+            light_filename: PathBuf::from(name)
                 .file_name()
                 .unwrap()
                 .to_str()
@@ -71,8 +69,20 @@ impl Rule {
         }
     }
 
-    pub fn get_name(&self) -> &str {
-        &self.name
+    pub fn light_filename(&self) -> &str {
+        &self.light_filename
+    }
+
+    pub fn description(&self) -> Option<&'static str> {
+        self.lib.description()
+    }
+
+    pub fn name(&self) -> &'static str {
+        self.lib.name()
+    }
+
+    pub fn author(&self) -> Option<&'static str> {
+        self.lib.author()
     }
 }
 
