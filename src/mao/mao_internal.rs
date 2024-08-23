@@ -128,7 +128,7 @@ pub struct UiCallbacks {
 
 pub struct MaoInternal {
     available_rules: Vec<Rule>,
-    activated_rules: Vec<Rule>,
+    activated_rules: Vec<usize>,
     stacks: Vec<Stack>,
     players: Vec<Player>,
     player_turn: usize,
@@ -143,8 +143,17 @@ pub struct MaoInternal {
 
 // getters and setters
 impl MaoInternal {
+    pub fn player_won(&self) -> Option<(usize, &Player)> {
+        self.players
+            .iter()
+            .enumerate()
+            .find(|(_, player)| player.get_cards().is_empty())
+    }
     pub fn available_rules(&self) -> &[Rule] {
         &self.available_rules
+    }
+    pub fn activated_rules_indexes(&self) -> &[usize] {
+        &self.activated_rules
     }
     pub fn players_events(&self) -> &[MaoEvent] {
         &self.player_events
@@ -246,21 +255,7 @@ impl MaoInternal {
             libraries.push(Rule::try_from(rule.as_str())?);
         }
 
-        // generate stacks
-        let mut stacks = vec![Stack::new(
-            Self::generate_common_draw(),
-            false,
-            vec![StackType::Drawable, StackType::Discardable],
-        )];
-        let first_card = stacks.first_mut().unwrap().draw_card().unwrap();
-        stacks.push(Stack::new(
-            vec![first_card],
-            true,
-            vec![StackType::Playable],
-        ));
-        stacks.push(Stack::new(vec![], true, vec![StackType::Discardable]));
-
-        let mut actions = vec![
+        let actions = vec![
             vec![
                 NodeState::new(
                     MaoInteraction::new(None, PlayerAction::SelectCard),
@@ -283,13 +278,14 @@ impl MaoInternal {
                 None,
             )],
         ];
-        for rule in &libraries {
-            if let Some(rule_actions) = rule.get_actions() {
-                actions.extend(rule_actions);
-            }
-        }
-        let mut s = Self::new(libraries, stacks, Vec::new(), Automaton::from_iter(actions));
+        let mut s = Self::new(
+            libraries,
+            Self::init_stacks(),
+            Vec::new(),
+            Automaton::from_iter(actions),
+        );
         // verify that all rules are valid
+        // TODO just not put rules that are not valid in the carbage
         if let Err(e) = s.rules_valid() {
             return Err(Error::DlOpen2 {
                 desc: DmDescription(
@@ -300,9 +296,26 @@ impl MaoInternal {
                 ),
             });
         }
-        s.activate_rule("petit_pique_grand_coeur")?;
+        // TODO removed
+        // s.activate_rule("petit_pique_grand_coeur")?;
 
         Ok(s)
+    }
+
+    pub fn init_stacks() -> Vec<Stack> {
+        let mut stacks = vec![Stack::new(
+            Self::generate_common_draw(),
+            false,
+            vec![StackType::Drawable, StackType::Discardable],
+        )];
+        let first_card = stacks.first_mut().unwrap().draw_card().unwrap();
+        stacks.push(Stack::new(
+            vec![first_card],
+            true,
+            vec![StackType::Playable],
+        ));
+        stacks.push(Stack::new(vec![], true, vec![StackType::Discardable]));
+        stacks
     }
 
     pub fn get_can_play_on_new_stack(&self) -> bool {
@@ -578,14 +591,58 @@ impl MaoInternal {
     /// This function will return an error if the [`Rule`] has not been found according to `rule_name`
     pub fn activate_rule(&mut self, rule_name: &str) -> Result<(), Error> {
         let rule_name = "lib".to_owned() + rule_name;
-        Ok(self.activated_rules.push(
-            (*self
-                .get_avalaible_rule_by_name(&rule_name)
-                .ok_or_else(|| Error::RuleNotFound {
-                    desc: DmDescription(format!("The rule {} has not been found", rule_name)),
-                })?)
-            .to_owned(),
-        ))
+        let rule_index = self
+            .get_avalaible_rule_by_name(&rule_name)
+            .ok_or_else(|| Error::RuleNotFound {
+                desc: DmDescription(format!("The rule {} has not been found", rule_name)),
+            })?
+            .0;
+        self.activated_rules.push(rule_index);
+        Ok(())
+    }
+
+    pub fn activate_rule_by_index(&mut self, index: usize) -> Result<(), Error> {
+        // the index des not correspond to an available rule
+        match self.available_rules.get(index) {
+            Some(rule) => {
+                // the rule has already been activated
+                if self.activated_rules.contains(&index) {
+                    return Err(Error::RuleAlreadyActivated {
+                        rule_name: rule.name().to_owned(),
+                    });
+                }
+
+                if let Some(actions) = rule.get_actions() {
+                    self.automaton.extend(actions);
+                }
+                self.activated_rules.push(index);
+                Ok(())
+            }
+            None => Err(Error::InvalidRuleIndex {
+                rule_index: index,
+                len: self.available_rules.len(),
+            }),
+        }
+    }
+
+    pub fn deactivate_rule_by_index(&mut self, index: usize) -> Result<(), Error> {
+        // TODO remove actions that the rule added
+        // the index des not correspond to an available rule
+        if self.available_rules.get(index).is_none() {
+            return Err(Error::InvalidRuleIndex {
+                rule_index: index,
+                len: self.available_rules.len(),
+            });
+        }
+
+        // the rule has already been activated
+        if !self.activated_rules.contains(&index) {
+            return Err(Error::RuleNotActivated {
+                rule_name: self.available_rules.get(index).unwrap().name().to_owned(),
+            });
+        }
+        self.activated_rules.retain(|&id| id != index);
+        Ok(())
     }
 
     /// Checks if a player can play its card according to the initial Mao rules
@@ -618,13 +675,14 @@ impl MaoInternal {
 
     /// Returns the [`Rule`] which as to be activated according to `rule_name`
     #[allow(dead_code)]
-    fn get_activated_rule_by_name(&self, rule_name: &str) -> Option<&Rule> {
-        MaoInternal::get_rule_by_name(&self.activated_rules, rule_name)
+    fn get_activated_rule_by_name(&self, rule_name: &str) -> Option<(usize, &Rule)> {
+        self.get_avalaible_rule_by_name(rule_name)
+            .and_then(|(i, rule)| self.activated_rules.get(i).and(Some((i, rule))))
     }
 
     /// Returns the [`Rule`] from all rules according to `rule_name`
-    fn get_avalaible_rule_by_name(&self, rule_name: &str) -> Option<&Rule> {
-        MaoInternal::get_rule_by_name(&self.available_rules, rule_name)
+    fn get_avalaible_rule_by_name(&self, rule_name: &str) -> Option<(usize, &Rule)> {
+        MaoInternal::get_rule_by_light_filename(&self.available_rules, rule_name)
     }
 
     /// Returns a [`Vec`] of a reference to a drawable stack and its index
@@ -647,13 +705,17 @@ impl MaoInternal {
         self.get_specific_stacks_mut(&[StackType::Playable])
     }
 
-    /// Returns a [`Rule`] according to `rule_name`
+    /// Returns a [`Rule`] according to `rule_name` with its index
     /// if the rule is not present None is returned
-    fn get_rule_by_name<'a>(rules: &'a [Rule], rule_name: &str) -> Option<&'a Rule> {
+    fn get_rule_by_light_filename<'t>(
+        rules: &'t [Rule],
+        rule_light_filename: &str,
+    ) -> Option<(usize, &'t Rule)> {
         rules
             .iter()
-            .filter(|rule| rule.get_name() == rule_name)
-            .collect::<Vec<&Rule>>()
+            .enumerate()
+            .filter(|rule| rule.1.light_filename() == rule_light_filename)
+            .collect::<Vec<(usize, &Rule)>>()
             .first()
             .map(|v| *v)
     }
@@ -867,6 +929,35 @@ impl MaoInternal {
         Ok(())
     }
 
+    pub fn init_all_players(&mut self, nb_card: usize) -> Result<(), Error> {
+        for i in 0..self.players.len() {
+            let cards: Vec<Card> = self
+                .draw_multiple_cards_unchosen(nb_card)?
+                .iter()
+                .cloned()
+                .collect();
+            self.players
+                .get_mut(i)
+                .unwrap()
+                .get_cards_mut()
+                .extend(cards);
+        }
+        Ok(())
+    }
+
+    pub fn init_new_game(&mut self, nb_card: usize) -> Result<(), Error> {
+        // TODO set dealer
+        for player in self.players.iter_mut() {
+            player.get_cards_mut().clear();
+        }
+        self.stacks = Self::init_stacks();
+        self.player_events.clear();
+        self.automaton.reset();
+
+        self.init_all_players(nb_card)?;
+        Ok(())
+    }
+
     /// Add a new played stack filled with the given `cards`
     pub fn new_played_stack(&mut self, cards: &[Card], visible: bool) {
         self.stacks.push(Stack::new(
@@ -929,7 +1020,11 @@ impl MaoInternal {
         self.player_events.push(event.to_owned());
         let mut results = Vec::with_capacity(self.activated_rules.len());
         for i in 0..self.activated_rules.len() {
-            results.push(self.activated_rules[i].get_on_event_func()(&event, self)?);
+            results.push(self
+                .available_rules
+                .get(self.activated_rules[i])
+                .unwrap()
+                .get_on_event_func()(&event, self)?);
         }
         Ok(results)
     }

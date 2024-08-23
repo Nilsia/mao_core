@@ -23,6 +23,7 @@ pub enum PlayerAction {
     SelectPlayableStack,
     SelectDrawableStack,
     SelectDiscardableStack,
+    SelectRule,
 }
 
 impl From<StackType> for PlayerAction {
@@ -46,6 +47,7 @@ impl std::fmt::Display for PlayerAction {
                 PlayerAction::SelectPlayableStack => "playable stack",
                 PlayerAction::SelectDrawableStack => "drawable stack",
                 PlayerAction::SelectDiscardableStack => "discardable stack",
+                PlayerAction::SelectRule => "rule",
             }
         )
     }
@@ -329,6 +331,13 @@ impl Automaton {
         }
         return true;
     }
+
+    fn verify_action_path(datas: &[NodeState]) {
+        assert!(datas.last().is_some_and(|v| v.func.is_some()));
+        assert!(datas[..datas.len().saturating_sub(1)]
+            .iter()
+            .all(|v| v.func.is_none()));
+    }
 }
 
 impl FromIterator<Vec<NodeState>> for Automaton {
@@ -341,16 +350,18 @@ impl FromIterator<Vec<NodeState>> for Automaton {
             root,
         };
         for datas in iter.into_iter() {
-            assert!(datas.last().is_some_and(|v| v.func.is_some()));
-            assert!(datas[..datas.len().saturating_sub(1)]
-                .iter()
-                .all(|v| v.func.is_none()));
+            Self::verify_action_path(&datas);
             ret.insert_iter(&datas);
         }
         ret
-        // Self {
-        //     arena: arena,
-        //     current_state: root,
-        // }
+    }
+}
+
+impl Extend<Vec<NodeState>> for Automaton {
+    fn extend<T: IntoIterator<Item = Vec<NodeState>>>(&mut self, iter: T) {
+        for datas in iter.into_iter() {
+            Self::verify_action_path(&datas);
+            self.insert_iter(&datas);
+        }
     }
 }

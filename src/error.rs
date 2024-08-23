@@ -41,6 +41,10 @@ pub enum Error {
         player_index: usize,
         len: usize,
     },
+    InvalidRuleIndex {
+        rule_index: usize,
+        len: usize,
+    },
     FunctionNotFound {
         rule_name: String,
         func_name: String,
@@ -52,6 +56,12 @@ pub enum Error {
         received: Vec<PlayerAction>,
     },
     OnMaoInteraction(String),
+    RuleAlreadyActivated {
+        rule_name: String,
+    },
+    RuleNotActivated {
+        rule_name: String,
+    },
 }
 
 impl Error {
@@ -125,6 +135,21 @@ impl std::fmt::Display for Error {
                 "Invalid mao interactions: \nexpected: {expected:?}\nreceived: {received:?}"
             ),
             Error::OnMaoInteraction(s) => write!(f, "OnMaoInteraction: {}", s),
+            Error::InvalidRuleIndex { rule_index, len } => write!(
+                f,
+                "Invalid Rule index given : {} out of {}",
+                rule_index, len
+            ),
+            Error::RuleAlreadyActivated { rule_name } => {
+                write!(f, "The {} has already been activated !", rule_name)
+            }
+            Error::RuleNotActivated { rule_name } => {
+                write!(
+                    f,
+                    "The {} is not activated and it as been requested to be deactivated !",
+                    rule_name
+                )
+            }
         }
     }
 }
