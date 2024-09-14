@@ -4,17 +4,17 @@ use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::{
     error::Error,
-    mao::{automaton::NodeState, mao_internal::MaoInternal},
+    mao::{automaton::NodeState, mao_internal::MaoCore},
     mao_event::{mao_event_result::MaoEventResult, MaoEvent},
     VERSION,
 };
 
 type OnEventFunctionSignature =
-    fn(event: &MaoEvent, mao: &mut MaoInternal) -> anyhow::Result<MaoEventResult>;
+    fn(event: &MaoEvent, mao: &mut MaoCore) -> anyhow::Result<MaoEventResult>;
 
 #[derive(WrapperApi)]
 pub struct Library {
-    on_event: fn(event: &MaoEvent, mao: &mut MaoInternal) -> anyhow::Result<MaoEventResult>,
+    on_event: fn(event: &MaoEvent, mao: &mut MaoCore) -> anyhow::Result<MaoEventResult>,
     get_version: fn() -> String,
     get_actions: Option<fn() -> Vec<Vec<NodeState>>>,
     name: fn() -> &'static str,
@@ -59,7 +59,7 @@ impl Rule {
         self.lib.get_actions()
     }
 
-    pub fn is_valid_rule(&self, mao: &mut MaoInternal) -> Result<(), Error> {
+    pub fn is_valid_rule(&self, mao: &mut MaoCore) -> Result<(), Error> {
         let event = MaoEvent::VerifyEvent;
         (self.get_on_event_func())(&event, mao).unwrap();
         let version = &self.get_version();

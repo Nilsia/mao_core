@@ -2,7 +2,7 @@ use indextree::{Arena, NodeId};
 
 use crate::{error::Error, mao_event::mao_event_result::Disallow, stack::stack_type::StackType};
 
-use super::{mao_action::MaoInteraction, mao_internal::MaoInternal};
+use super::{mao_action::MaoInteraction, mao_internal::MaoCore};
 
 #[derive(Debug)]
 pub enum MaoInteractionResult<'a> {
@@ -55,7 +55,7 @@ impl std::fmt::Display for PlayerAction {
 
 /// (mao, player_index, datas)
 pub type CallbackInteraction =
-    fn(usize, &mut MaoInternal, &[MaoInteraction]) -> anyhow::Result<Vec<Disallow>>;
+    fn(usize, &mut MaoCore, &[MaoInteraction]) -> anyhow::Result<Vec<Disallow>>;
 
 #[derive(Debug, Clone, Default)]
 pub struct NodeState {

@@ -117,7 +117,7 @@ pub enum RequestResponse {
 }
 
 pub type RequestCallback =
-    fn(mao: &mut MaoInternal, data: RequestData) -> anyhow::Result<RequestResponse>;
+    fn(mao: &mut MaoCore, data: RequestData) -> anyhow::Result<RequestResponse>;
 /// (column, row)
 pub type Coords = (usize, usize);
 
@@ -126,7 +126,7 @@ pub struct UiCallbacks {
     pub prompt_coords: fn() -> anyhow::Result<Coords>,
 }
 
-pub struct MaoInternal {
+pub struct MaoCore {
     available_rules: Vec<Rule>,
     activated_rules: Vec<usize>,
     stacks: Vec<Stack>,
@@ -142,7 +142,7 @@ pub struct MaoInternal {
 }
 
 // getters and setters
-impl MaoInternal {
+impl MaoCore {
     pub fn player_won(&self) -> Option<(usize, &Player)> {
         self.players
             .iter()
@@ -194,7 +194,7 @@ impl MaoInternal {
 
     fn draw_interaction(
         player_index: usize,
-        mao: &mut MaoInternal,
+        mao: &mut MaoCore,
         interactions: &[MaoInteraction],
     ) -> anyhow::Result<Vec<Disallow>> {
         let required = vec![PlayerAction::SelectDrawableStack];
@@ -265,7 +265,7 @@ impl MaoInternal {
                 NodeState::new(
                     MaoInteraction::new(None, PlayerAction::SelectPlayableStack),
                     Some(|player_index, mao, datas| {
-                        MaoInternal::play_interaction(player_index, mao, datas)
+                        MaoCore::play_interaction(player_index, mao, datas)
                     }),
                     None,
                 ),
@@ -273,7 +273,7 @@ impl MaoInternal {
             vec![NodeState::new(
                 MaoInteraction::new(None, PlayerAction::SelectDrawableStack),
                 Some(|player_index, mao, datas| {
-                    MaoInternal::draw_interaction(player_index, mao, datas)
+                    MaoCore::draw_interaction(player_index, mao, datas)
                 }),
                 None,
             )],
@@ -464,7 +464,7 @@ impl MaoInternal {
 
     fn play_interaction(
         player_index: usize,
-        mao: &mut MaoInternal,
+        mao: &mut MaoCore,
         interactions: &[MaoInteraction],
     ) -> anyhow::Result<Vec<Disallow>> {
         let expected = vec![PlayerAction::SelectCard, PlayerAction::SelectPlayableStack];
@@ -531,7 +531,7 @@ impl MaoInternal {
 }
 
 // miscellious
-impl MaoInternal {
+impl MaoCore {
     pub fn get_executed_actions(&self) -> Vec<&NodeState> {
         self.automaton.get_executed_actions()
     }
@@ -682,7 +682,7 @@ impl MaoInternal {
 
     /// Returns the [`Rule`] from all rules according to `rule_name`
     fn get_avalaible_rule_by_name(&self, rule_name: &str) -> Option<(usize, &Rule)> {
-        MaoInternal::get_rule_by_light_filename(&self.available_rules, rule_name)
+        MaoCore::get_rule_by_light_filename(&self.available_rules, rule_name)
     }
 
     /// Returns a [`Vec`] of a reference to a drawable stack and its index
@@ -1417,7 +1417,7 @@ impl MaoInternal {
 }
 
 // players' actions
-impl MaoInternal {
+impl MaoCore {
     // pub fn on_mao_event(&mut self, mao_event: MaoEvent) -> Result<Vec<Disallow>, Error> {
     //     match mao_event {
     //         MaoEvent::PlayedCardEvent(e) => self.on_play_card(e),
