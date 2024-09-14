@@ -334,23 +334,23 @@ impl MaoCore {
             .len())
     }
 
-    pub fn get_player_turn(&self) -> usize {
+    pub fn player_turn(&self) -> usize {
         self.player_turn
     }
 
-    pub fn get_players(&self) -> &[Player] {
+    pub fn players(&self) -> &[Player] {
         &self.players
     }
 
-    pub fn get_players_mut(&mut self) -> &mut Vec<Player> {
+    pub fn players_mut(&mut self) -> &mut Vec<Player> {
         &mut self.players
     }
 
-    pub fn get_stacks(&self) -> &[Stack] {
+    pub fn stacks(&self) -> &[Stack] {
         &self.stacks
     }
 
-    pub fn get_stacks_mut(&mut self) -> &mut Vec<Stack> {
+    pub fn stacks_mut(&mut self) -> &mut Vec<Stack> {
         &mut self.stacks
     }
 
@@ -419,9 +419,7 @@ impl MaoCore {
         let player_turn_res = self.can_play(
             card_event.player_index,
             &card_event.played_card,
-            card_event
-                .stack_index
-                .and_then(|i| self.get_stacks().get(i)),
+            card_event.stack_index.and_then(|i| self.stacks().get(i)),
         );
         if !matches!(player_turn_res, PlayerTurnResult::CanPlay) {
             self.on_penality(card_event.player_index)?;
