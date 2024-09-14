@@ -1,4 +1,4 @@
-use crate::{mao::node_state::PlayerAction, stack::stack_type::StackType};
+use crate::{mao::automaton::PlayerAction, stack::stack_type::StackType};
 
 #[derive(Debug)]
 pub struct DmDescription(pub(crate) String);

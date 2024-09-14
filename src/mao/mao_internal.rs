@@ -23,8 +23,8 @@ use crate::{
 };
 
 use super::{
+    automaton::{Automaton, MaoInteractionResult, NodeState, PlayerAction},
     mao_action::MaoInteraction,
-    node_state::{Automaton, MaoInteractionResult, NodeState, PlayerAction},
 };
 
 pub fn log(msg: &[u8]) -> anyhow::Result<()> {

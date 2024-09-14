@@ -1,4 +1,4 @@
-use super::node_state::PlayerAction;
+use super::automaton::PlayerAction;
 
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct MaoInteraction {
