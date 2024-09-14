@@ -1,4 +1,4 @@
-use crate::mao::mao_internal::{MaoActionResult, MaoCore};
+use crate::mao::mao_core::{MaoActionResult, MaoCore};
 
 use super::MaoEvent;
 

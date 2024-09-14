@@ -4,7 +4,7 @@ use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::{
     error::Error,
-    mao::{automaton::NodeState, mao_internal::MaoCore},
+    mao::{automaton::NodeState, mao_core::MaoCore},
     mao_event::{mao_event_result::MaoEventResult, MaoEvent},
     VERSION,
 };

@@ -2,7 +2,7 @@ use indextree::{Arena, NodeId};
 
 use crate::{error::Error, mao_event::mao_event_result::Disallow, stack::stack_type::StackType};
 
-use super::{mao_action::MaoInteraction, mao_internal::MaoCore};
+use super::{mao_action::MaoInteraction, mao_core::MaoCore};
 
 #[derive(Debug)]
 pub enum MaoInteractionResult<'a> {
