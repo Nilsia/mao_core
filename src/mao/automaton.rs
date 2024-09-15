@@ -64,6 +64,26 @@ pub struct NodeState {
     pub func: Option<CallbackInteraction>,
 }
 
+impl Ord for NodeState {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (&self.action, &self.rule).cmp(&(&other.action, &other.rule))
+    }
+}
+
+impl PartialOrd for NodeState {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for NodeState {
+    fn eq(&self, other: &Self) -> bool {
+        self.action == other.action && self.rule == other.rule
+    }
+}
+
+impl Eq for NodeState {}
+
 impl NodeState {
     pub fn new(
         action: MaoInteraction,
@@ -74,42 +94,72 @@ impl NodeState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct Automaton {
     arena: Arena<NodeState>,
     current_state: NodeId,
     root: NodeId,
 }
 
+impl std::fmt::Debug for Automaton {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "current state id : {}\n", self.current_state)?;
+        write!(f, "{}", self.current_state.debug_pretty_print(&self.arena))
+    }
+}
+
 impl std::fmt::Display for NodeState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.action.fmt(f)
+        write!(
+            f,
+            "{} {} {}",
+            self.action,
+            self.rule
+                .as_ref()
+                .map_or(String::new(), |r| format!("({})", r)),
+            self.func.map_or(String::new(), |f| format!("({f:?})"))
+        )
     }
 }
 
 impl Automaton {
+    // fn get_all_leaves(&self) -> Vec<NodeId> {
+
+    // }
     /// Returns the NodeId according to PartialEq from `self.current_state` if it exists
     /// Only a node with no function is returned
-    fn get_node(&self, action: PlayerAction) -> Option<NodeId> {
-        self.get_node_of(self.current_state, action)
+    fn get_node_from_current(&self, action: PlayerAction) -> Option<NodeId> {
+        self.get_node_id_of(self.current_state, action)
     }
 
-    /// Returns the leaves' id (executable nodes) of this [`Automaton`]
-    fn get_leaves(&self, action: PlayerAction) -> Vec<NodeId> {
-        self.current_state
-            .children(&self.arena)
+    /// Returns the leaves' id (executable nodes) of this [`Automaton`] according to `self.current_state`
+    fn get_currrent_leaves(&self, action: PlayerAction) -> Vec<NodeId> {
+        self.children_of(self.current_state)
+            .iter()
             .filter(|id| {
-                let node_data = self.arena.get(*id).map(|node| node.get()).unwrap();
+                let node_data = self.arena.get(**id).map(|node| node.get()).unwrap();
                 action == node_data.action.action && node_data.func.is_some()
             })
+            .cloned()
+            .collect()
+    }
+
+    fn get_leaves(&self, node_id: NodeId) -> Vec<NodeId> {
+        self.children_of(node_id)
+            .iter()
+            .filter(|&&id| {
+                let node = self.arena.get(id).unwrap().get();
+                node.func.is_some()
+            })
+            .cloned()
             .collect()
     }
 
     /// Search among the children of the current state if there is any node which matches to `action`
     fn search_type(&self, action: PlayerAction) -> Vec<NodeId> {
-        self.current_state
-            .children(&self.arena)
-            .filter(|id| {
+        self.children_of(self.current_state)
+            .iter()
+            .filter(|&id| {
                 self.arena
                     .get(*id)
                     .map(|node| node.get())
@@ -118,18 +168,38 @@ impl Automaton {
                     .action
                     == action
             })
+            .cloned()
             .collect()
     }
 
     /// Insert this iterator,
     /// the first one is the parent, and each next one is the child of the previous one
     fn insert_iter(&mut self, datas: &[NodeState]) {
+        if datas.is_empty() {
+            return;
+        }
         let mut parent = self.root;
-        for data in datas {
-            parent = match self.get_node(data.action.action.to_owned()) {
+        // create only nodes which do not holds function
+        for data in &datas[..datas.len().saturating_sub(1)] {
+            parent = match self.get_node_id_of(parent, data.action.action.to_owned()) {
                 Some(par) => par,
-                None => parent.append_value(data.to_owned(), &mut self.arena),
+                None => parent.append_value(
+                    NodeState::new(data.action.to_owned(), data.func, None),
+                    &mut self.arena,
+                ),
             };
+        }
+        // append function/leaf in order to check if the leaf is different the all the other ones
+        let last = datas.last().unwrap();
+        let leaves: Vec<&NodeState> = self
+            .get_leaves(parent)
+            .iter()
+            .map(|&id| self.arena.get(id).unwrap().get())
+            .collect();
+        if leaves.contains(&&last) {
+            panic!("Cannot add node {last:?} because it is already present inside Self");
+        } else {
+            parent.append_value(last.to_owned(), &mut self.arena);
         }
     }
 
@@ -164,8 +234,9 @@ impl Automaton {
                         }
                         // is a node so advance in it
                         None => {
-                            self.current_state =
-                                self.get_node(interaction.action.to_owned()).unwrap();
+                            self.current_state = self
+                                .get_node_id_of(self.current_state, interaction.action.to_owned())
+                                .unwrap();
                             self.arena
                                 .get_mut(self.current_state)
                                 .unwrap()
@@ -261,15 +332,6 @@ impl Automaton {
         self.current_state = self.root;
     }
 
-    // pub fn advance_next_action(&mut self, action: PlayerAction) -> Result<(), Error> {
-    //     if let Some(node) = self.get_node(action) {
-    //         self.current_state = node;
-    //         Ok(())
-    //     } else {
-    //         Err(Error::StateNotFound)
-    //     }
-    // }
-
     /// Returns the current state, returning None if no action has been done yet
     ///
     /// # Panics
@@ -310,20 +372,30 @@ impl Automaton {
         a
     }
 
-    fn get_node_of(&self, node_id: NodeId, action: PlayerAction) -> Option<NodeId> {
-        node_id
-            .children(&self.arena)
-            .filter(|id| {
+    fn get_node_id_from_children(&self, node_id: NodeId, node_state: &NodeState) -> Option<NodeId> {
+        self.children_of(node_id)
+            .iter()
+            .find(|&&id| {
+                let node = self.arena.get(id).unwrap();
+                !node.is_removed() && node_state == node.get()
+            })
+            .cloned()
+    }
+
+    fn get_node_id_of(&self, node_id: NodeId, action: PlayerAction) -> Option<NodeId> {
+        self.children_of(node_id)
+            .iter()
+            .find(|&id| {
                 let node_data = self.arena.get(*id).map(|node| node.get()).unwrap();
                 action == node_data.action.action && node_data.func.is_none()
             })
-            .next()
+            .cloned()
     }
 
     pub fn path_exists(&self, path: &[PlayerAction]) -> bool {
         let mut current = self.current_state;
         for action in &path[..path.len().saturating_sub(1)] {
-            if let Some(node_id) = self.get_node_of(current, action.to_owned()) {
+            if let Some(node_id) = self.get_node_id_of(current, action.to_owned()) {
                 current = node_id;
             } else {
                 return false;
@@ -338,10 +410,116 @@ impl Automaton {
             .iter()
             .all(|v| v.func.is_none()));
     }
+
+    fn convert_into_node_ids<'a>(
+        &self,
+        path: impl IntoIterator<Item = &'a NodeState>,
+    ) -> Option<Vec<NodeId>> {
+        let mut data = vec![self.root];
+        for node_state in path.into_iter() {
+            match self.get_node_id_from_children(data.last().unwrap().to_owned(), node_state) {
+                Some(node_id) => data.push(node_id),
+                None => {
+                    return None;
+                }
+            }
+        }
+        data.remove(0);
+        Some(data)
+    }
+
+    /// Removes the field `rule` of [`NodeState`] of all the nodes
+    fn clear_path<T>(mut path: T)
+    where
+        T: AsMut<Vec<NodeState>>,
+    {
+        if path.as_mut().is_empty() {
+            return;
+        }
+        for node_state in path.as_mut().split_last_mut().unwrap().1.iter_mut() {
+            node_state.rule = None;
+        }
+    }
+
+    pub fn remove_paths<'a, T>(&mut self, paths: T)
+    where
+        T: IntoIterator,
+        T::Item: AsMut<Vec<NodeState>> + AsRef<Vec<NodeState>>,
+    {
+        for mut path in paths.into_iter() {
+            if path.as_ref().is_empty() {
+                continue;
+            }
+            Self::clear_path(&mut path);
+            Self::verify_action_path(path.as_ref());
+            let node_ids = self.convert_into_node_ids(path.as_ref());
+
+            if let Some(node_ids) = node_ids {
+                for node_id in node_ids.iter().rev() {
+                    if self.children_of(*node_id).len() == 0 {
+                        node_id.remove(&mut self.arena);
+                    }
+                }
+            }
+        }
+    }
+
+    fn children_of(&self, node_id: NodeId) -> Vec<NodeId> {
+        node_id
+            .children(&self.arena)
+            .filter(|v| !v.is_removed(&self.arena))
+            .collect()
+    }
+
+    fn same_node(&self, self_node_id: NodeId, (other, node_id): (&Self, NodeId)) -> bool {
+        let (self_actions, other_actions): (Vec<NodeId>, Vec<NodeId>) = (
+            self.children_of(self_node_id).into_iter().collect(),
+            other.children_of(node_id).into_iter().collect(),
+        );
+        // assert_eq!(self_actions.len(), other_actions.len());
+        if self_actions.len() != other_actions.len() {
+            return false;
+        }
+        let mut self_actions: Vec<(NodeId, &NodeState)> = self_actions
+            .iter()
+            .map(|s| (*s, self.arena.get(*s).unwrap().get()))
+            .collect();
+        let mut other_actions: Vec<(NodeId, &NodeState)> = other_actions
+            .iter()
+            .map(|o| (*o, other.arena.get(*o).unwrap().get()))
+            .collect();
+        self_actions.sort_by(|(_, node1), (_, node2)| node1.cmp(node2));
+        other_actions.sort_by(|(_, node1), (_, node2)| node1.cmp(node2));
+
+        for ((s_id, s_node), (o_id, o_node)) in self_actions.iter().zip(&other_actions) {
+            // assert_eq!(s_node, o_node);
+            if s_node.func.is_some() != o_node.func.is_some() {
+                return false;
+            }
+            if s_node.func.is_some() {
+                // there are leaves (exectable nodes)
+                if s_node != o_node {
+                    return false;
+                }
+            } else {
+                // there only nodes
+                if s_node.action != o_node.action {
+                    return false;
+                }
+            }
+            if !self.same_node(*s_id, (other, *o_id)) {
+                return false;
+            }
+        }
+        true
+    }
 }
 
-impl FromIterator<Vec<NodeState>> for Automaton {
-    fn from_iter<T: IntoIterator<Item = Vec<NodeState>>>(iter: T) -> Self {
+impl<V> FromIterator<V> for Automaton
+where
+    V: AsRef<Vec<NodeState>> + AsMut<Vec<NodeState>>,
+{
+    fn from_iter<T: IntoIterator<Item = V>>(iter: T) -> Self {
         let mut arena: Arena<NodeState> = Arena::new();
         let root = arena.new_node(NodeState::new(MaoInteraction::default(), None, None));
         let mut ret = Self {
@@ -349,19 +527,30 @@ impl FromIterator<Vec<NodeState>> for Automaton {
             current_state: root,
             root,
         };
-        for datas in iter.into_iter() {
-            Self::verify_action_path(&datas);
-            ret.insert_iter(&datas);
+        for mut datas in iter.into_iter() {
+            Self::verify_action_path(datas.as_ref());
+            Self::clear_path(datas.as_mut());
+            ret.insert_iter(datas.as_ref());
         }
         ret
     }
 }
 
-impl Extend<Vec<NodeState>> for Automaton {
-    fn extend<T: IntoIterator<Item = Vec<NodeState>>>(&mut self, iter: T) {
-        for datas in iter.into_iter() {
-            Self::verify_action_path(&datas);
-            self.insert_iter(&datas);
+impl<V> Extend<V> for Automaton
+where
+    V: AsRef<Vec<NodeState>> + AsMut<Vec<NodeState>>,
+{
+    fn extend<T: IntoIterator<Item = V>>(&mut self, iter: T) {
+        for mut datas in iter.into_iter() {
+            Self::verify_action_path(datas.as_ref());
+            Self::clear_path(&mut datas);
+            self.insert_iter(datas.as_ref());
         }
+    }
+}
+
+impl PartialEq for Automaton {
+    fn eq(&self, other: &Self) -> bool {
+        self.same_node(self.root, (other, other.root))
     }
 }

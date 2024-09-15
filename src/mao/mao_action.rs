@@ -1,6 +1,6 @@
 use super::automaton::PlayerAction;
 
-#[derive(Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, PartialOrd, Ord)]
 pub struct MaoInteraction {
     pub index: Option<usize>,
     pub action: PlayerAction,
