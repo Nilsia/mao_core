@@ -1,16 +1,18 @@
 use core::result::Result;
 
 use rand::{seq::SliceRandom, thread_rng};
+use serde::Deserialize;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
     ops::DerefMut,
     path::PathBuf,
+    str::FromStr,
 };
 
 use crate::{
     card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
-    config::Config,
+    config::{CardEffectsKey, Config},
     error::{DmDescription, Error},
     mao_event::{
         card_event::CardEvent,
@@ -37,10 +39,30 @@ pub fn log(msg: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PlayerTurnUpdater {
     Set(usize),
     Update(isize),
+}
+
+impl FromStr for PlayerTurnUpdater {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let splitted: Vec<&str> = s.split('_').collect();
+        match splitted.len() {
+            2 => match splitted.first().unwrap() {
+                &"set" => Ok(Self::Set(splitted.last().unwrap().parse()?)),
+                &"up" => Ok(Self::Update(splitted.last().unwrap().parse()?)),
+                _ => Err(anyhow::anyhow!(
+                    "Invalid identifier (1) for PlayerTurnUpdater"
+                )),
+            },
+            _ => Err(anyhow::anyhow!(
+                "Invalid identifier when parsing PlayerTurnUpdater"
+            )),
+        }
+    }
 }
 
 impl Default for PlayerTurnUpdater {
@@ -49,10 +71,57 @@ impl Default for PlayerTurnUpdater {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PlayerTurnChange {
     Update(PlayerTurnUpdater),
     Rotate(PlayerTurnUpdater),
+}
+struct PlayerTurnChangeVisitor;
+
+impl<'dee> serde::de::Visitor<'dee> for PlayerTurnChangeVisitor {
+    type Value = PlayerTurnChange;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "internal error when parsing PlayerTurnChange")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        v.parse::<PlayerTurnChange>().map_err(E::custom)
+    }
+}
+
+impl<'de> Deserialize<'de> for PlayerTurnChange {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(PlayerTurnChangeVisitor)
+    }
+}
+
+impl FromStr for PlayerTurnChange {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let splitted: Vec<&str> = s.split('_').collect();
+        match splitted.len() {
+            3 => {
+                let updater =
+                    (splitted[1].to_string() + "_" + splitted[2]).parse::<PlayerTurnUpdater>()?;
+                match splitted.first().unwrap() {
+                    &"up" => Ok(Self::Update(updater)),
+                    &"ro" => Ok(Self::Rotate(updater)),
+                    _ => Err(anyhow::anyhow!(
+                        "Invalid identifier when parsing first item"
+                    )),
+                }
+            }
+            _ => Err(anyhow::anyhow!("Invalid parsing for PlayerTurnChange")),
+        }
+    }
 }
 
 impl Default for PlayerTurnChange {
@@ -139,6 +208,7 @@ pub struct MaoCore {
     can_play_on_new_stack: bool,
     automaton: Automaton,
     dealer: usize,
+    config: Config,
 }
 
 // getters and setters
@@ -284,6 +354,7 @@ impl MaoCore {
             Vec::new(),
             Automaton::from_iter(actions),
         );
+        s.config = config.to_owned();
         // verify that all rules are valid
         // TODO just not put rules that are not valid in the carbage
         if let Err(e) = s.rules_valid() {
@@ -371,6 +442,7 @@ impl MaoCore {
             can_play_on_new_stack: false,
             automaton,
             dealer: 0,
+            config: Config::default(),
         }
     }
 
@@ -976,16 +1048,32 @@ impl MaoCore {
                         self.update_turn(PlayerTurnChange::default());
                         return;
                     }
-                    let changes: PlayerTurnChange = match card_event.played_card.get_value() {
-                        CardValue::Number(i) => match i {
-                            2 => PlayerTurnChange::Update(PlayerTurnUpdater::Update(2)),
-                            10 => PlayerTurnChange::Rotate(PlayerTurnUpdater::Update(1)),
-
-                            _ => PlayerTurnChange::default(),
-                        },
-                        CardValue::MinusInfinity => PlayerTurnChange::default(),
-                        CardValue::PlusInfinity => PlayerTurnChange::default(),
-                    };
+                    let changes: PlayerTurnChange =
+                        match self.config.cards_effects.as_ref().and_then(|hash| {
+                            hash.get(&&CardEffectsKey::new(
+                                None,
+                                card_event.played_card.get_value().to_owned(),
+                            ))
+                        }) {
+                            Some(changes) => changes.to_owned(),
+                            None => self
+                                .config
+                                .cards_effects
+                                .as_ref()
+                                .and_then(|hash| {
+                                    hash.keys()
+                                        .find(|&CardEffectsKey { c_type, value }| {
+                                            c_type.is_none()
+                                                && value == card_event.played_card.get_value()
+                                        })
+                                        .and_then(|key| {
+                                            self.config.cards_effects.as_ref().unwrap().get(key)
+                                        })
+                                        .cloned()
+                                })
+                                .unwrap_or(PlayerTurnChange::default())
+                                .to_owned(),
+                        };
                     self.update_turn(changes);
                 }
             }

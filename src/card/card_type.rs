@@ -1,8 +1,10 @@
+use std::str::FromStr;
+
 use crate::card::{RED, RESET};
 
 use super::{card_color::CardColor, common_card_type::CommonCardType};
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CardType {
     Common(CommonCardType),
     Rule,
@@ -12,6 +14,25 @@ pub enum CardType {
 impl Default for CardType {
     fn default() -> Self {
         Self::Common(CommonCardType::Spade)
+    }
+}
+
+impl FromStr for CardType {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(match value {
+            "rule" => Self::Rule,
+            "jred" => Self::Jocker {
+                desc: String::new(),
+                color: CardColor::Red,
+            },
+            "jvlack" => Self::Jocker {
+                desc: String::new(),
+                color: CardColor::Black,
+            },
+            _ => Self::Common(CommonCardType::from_str(value)?),
+        })
     }
 }
 

@@ -1,8 +1,25 @@
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+use std::str::FromStr;
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CardValue {
     Number(isize),
     MinusInfinity,
     PlusInfinity,
+}
+
+impl FromStr for CardValue {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<isize>().map_or_else(
+            |_| match s {
+                "plusinfinity" => Ok(Self::PlusInfinity),
+                "minusinfinity" => Ok(Self::MinusInfinity),
+                _ => Err(anyhow::anyhow!("Invalid str for parsing CardValue")),
+            },
+            |v| Ok(Self::Number(v)),
+        )
+    }
 }
 
 impl Default for CardValue {

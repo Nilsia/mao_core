@@ -1,11 +1,29 @@
+use std::str::FromStr;
+
 use super::{card_color::CardColor, RED, RESET};
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CommonCardType {
     Spade,   // Pique
     Diamond, //Carreau
     Club,    // Trefle
     Heart,   // coeur
+}
+
+impl FromStr for CommonCardType {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "spade" => Ok(Self::Heart),
+            "diamond" => Ok(Self::Heart),
+            "club" => Ok(Self::Heart),
+            "heart" => Ok(Self::Heart),
+            _ => Err(anyhow::anyhow!(
+                "Invalid parsing for {value} into CommonCardType"
+            )),
+        }
+    }
 }
 
 impl std::fmt::Display for CommonCardType {
