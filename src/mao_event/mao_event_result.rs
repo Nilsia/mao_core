@@ -15,6 +15,49 @@ pub struct Disallow {
     pub penality: Option<PenalityCallbackFunction>,
 }
 
+impl std::fmt::Display for Disallow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.rule, self.msg)
+    }
+}
+
+#[derive(Clone)]
+pub enum ForgotType {
+    Say,
+    Do,
+    Other(String),
+}
+
+const FORGOT_SAY: &str = "You forget to say something";
+const FORGOT_DO: &str = "You forget to do something";
+impl AsRef<str> for ForgotType {
+    fn as_ref(&self) -> &str {
+        match &self {
+            ForgotType::Say => FORGOT_SAY,
+            ForgotType::Do => FORGOT_DO,
+            ForgotType::Other(s) => s,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct ForgotSomething {
+    pub forgot_type: ForgotType,
+    pub rule: String,
+    pub penality: Option<PenalityCallbackFunction>,
+}
+
+impl std::fmt::Display for ForgotSomething {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: {}",
+            self.rule.to_string(),
+            self.forgot_type.as_ref()
+        )
+    }
+}
+
 impl PartialEq for Disallow {
     fn eq(&self, other: &Self) -> bool {
         self.rule == other.rule && self.msg == other.msg
@@ -29,13 +72,6 @@ impl Disallow {
             penality,
         }
     }
-
-    // pub fn print_warning(&self, ui: Arc<dyn UiMaoTrait>) -> Result<(), Error> {
-    //     Ok(ui.show_information(&format!(
-    //         "You are not allowed to do this :{} ({})",
-    //         self.msg, self.rule,
-    //     ))?)
-    // }
 }
 pub type CallbackFunction = fn(&mut MaoCore, usize) -> anyhow::Result<MaoActionResult>;
 
@@ -67,12 +103,35 @@ impl MaoEventResult {
     }
 }
 
+#[derive(Clone)]
+pub enum WrongPlayerInteraction {
+    /// The event has been disallowed by the rule
+    Disallow(Disallow),
+    /// The player forgot to do/say/... something
+    ForgotSomething(ForgotSomething),
+}
+
+impl std::fmt::Display for WrongPlayerInteraction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                WrongPlayerInteraction::Disallow(dis) => dis.to_string(),
+                WrongPlayerInteraction::ForgotSomething(f) => f.to_string(),
+            }
+        )
+    }
+}
+
 /// The type of the [`MaoEventResult`]
 pub enum MaoEventResultType {
     /// The event has been ignored
     Ignored,
     /// The event has been disallowed by the rule
     Disallow(Disallow),
+    /// The player forgot to do/say/... something
+    ForgetSomething(ForgotSomething),
     /// The event will override basic rules, the function should modify itself the player turn, the basics rules won't be modified besides
     OverrideBasicRule(CallbackFunction),
     /// Contains a function which will modified the player turn but not override the basic change turn, this function will be executed before the basic change turn

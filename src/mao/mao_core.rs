@@ -16,7 +16,9 @@ use crate::{
     error::{DmDescription, Error},
     mao_event::{
         card_event::CardEvent,
-        mao_event_result::{CallbackFunction, Disallow, MaoEventResult, MaoEventResultType},
+        mao_event_result::{
+            CallbackFunction, Disallow, MaoEventResult, MaoEventResultType, WrongPlayerInteraction,
+        },
         MaoEvent, StackTarget,
     },
     player::Player,
@@ -266,7 +268,7 @@ impl MaoCore {
         player_index: usize,
         mao: &mut MaoCore,
         interactions: &[MaoInteraction],
-    ) -> anyhow::Result<Vec<Disallow>> {
+    ) -> anyhow::Result<Vec<WrongPlayerInteraction>> {
         let required = vec![PlayerAction::SelectDrawableStack];
         if !mao.correct_player_action(
             &required,
@@ -300,7 +302,7 @@ impl MaoCore {
     /// This function will return an error if
     /// + the config is not valid
     /// + a rule cannot be found
-    pub fn from_config(config: &Config) -> Result<Self, Error> {
+    pub fn from_config(config: &mut Config) -> Result<Self, Error> {
         let path = PathBuf::from(&config.dirname);
         config.verify()?;
         let rules: Vec<String> = fs::read_dir(&path)
@@ -377,7 +379,7 @@ impl MaoCore {
         let mut stacks = vec![Stack::new(
             Self::generate_common_draw(),
             false,
-            vec![StackType::Drawable, StackType::Discardable],
+            vec![StackType::Drawable],
         )];
         let first_card = stacks.first_mut().unwrap().draw_card().unwrap();
         stacks.push(Stack::new(
@@ -465,26 +467,40 @@ impl MaoCore {
         Ok(())
     }
 
-    fn on_play_card(&mut self, card_event: CardEvent) -> Result<Vec<Disallow>, Error> {
+    fn on_play_card(
+        &mut self,
+        card_event: CardEvent,
+    ) -> Result<Vec<WrongPlayerInteraction>, Error> {
         let event = MaoEvent::PlayedCardEvent(card_event.to_owned());
 
         // calling rules
         let res = self.on_event(&event)?;
 
-        let disallows = self.propagate_on_event_results_and_execute(
+        let wrong_int = self.propagate_on_event_results_and_execute(
             card_event.player_index,
             &event,
             &res.iter().map(|v| v).collect::<Vec<&MaoEventResult>>(),
         )?;
-        if !disallows.is_empty() {
-            for disallow in &disallows {
-                if let Some(func) = disallow.penality {
-                    func(self, card_event.player_index)?;
-                } else {
-                    self.on_penality(card_event.player_index)?;
+        if !wrong_int.is_empty() {
+            for int in &wrong_int {
+                match int {
+                    WrongPlayerInteraction::Disallow(disallow) => {
+                        if let Some(func) = disallow.penality {
+                            func(self, card_event.player_index)?;
+                        } else {
+                            self.on_penality(card_event.player_index)?;
+                        }
+                    }
+                    WrongPlayerInteraction::ForgotSomething(f) => {
+                        if let Some(func) = f.penality {
+                            func(self, card_event.player_index)?;
+                        } else {
+                            self.on_penality(card_event.player_index)?;
+                        }
+                    }
                 }
             }
-            return Ok(disallows);
+            return Ok(wrong_int);
         }
         // no interactions from external rules
         // check from official rules
@@ -508,7 +524,11 @@ impl MaoCore {
                 ),
                 PlayerTurnResult::Other { desc } => desc.to_owned(),
             };
-            return Ok(vec![Disallow::new("Basic Rules".to_string(), msg, None)]);
+            return Ok(vec![WrongPlayerInteraction::Disallow(Disallow::new(
+                "Basic Rules".to_string(),
+                msg,
+                None,
+            ))]);
         } else {
             // player can play
             // push card into played stack
@@ -536,7 +556,7 @@ impl MaoCore {
         player_index: usize,
         mao: &mut MaoCore,
         interactions: &[MaoInteraction],
-    ) -> anyhow::Result<Vec<Disallow>> {
+    ) -> anyhow::Result<Vec<WrongPlayerInteraction>> {
         let expected = vec![PlayerAction::SelectCard, PlayerAction::SelectPlayableStack];
         if !mao.correct_player_action(
             &expected,
@@ -1127,26 +1147,22 @@ impl MaoCore {
         player_index: usize,
         previous_event: &MaoEvent,
         event_results: &[&MaoEventResult],
-    ) -> Result<Vec<Disallow>, Error> {
+    ) -> Result<Vec<WrongPlayerInteraction>, Error> {
         if event_results
             .iter()
             .any(|r| !matches!(r.res_type, MaoEventResultType::Ignored,))
         {
-            let mut disallows: Vec<Disallow> = Vec::new();
+            let mut wrong_interactions: Vec<WrongPlayerInteraction> = Vec::new();
             // one rule did not ignored it
             let mut not_ignored: Vec<&MaoEventResult> = Vec::new();
             for mao_res in event_results {
                 match &mao_res.res_type {
                     MaoEventResultType::Disallow(disallow) => {
-                        disallows.push(disallow.to_owned());
-                        // disallow.print_warning(Arc::clone(&ui))?;
-                        // match disallow.penality.as_ref() {
-                        //     Some(func) => func(self, player_index, Arc::clone(&ui))?,
-                        //     None => {
-                        //         self.give_card_to_player(player_index, None, Arc::clone(&ui))?
-                        //     }
-                        // }
+                        wrong_interactions
+                            .push(WrongPlayerInteraction::Disallow(disallow.to_owned()));
                     }
+                    MaoEventResultType::ForgetSomething(s) => wrong_interactions
+                        .push(WrongPlayerInteraction::ForgotSomething(s.to_owned())),
                     MaoEventResultType::Ignored => (),
                     MaoEventResultType::OverrideBasicRule(_)
                     | MaoEventResultType::ExecuteBeforeTurnChange(_)
@@ -1163,7 +1179,9 @@ impl MaoCore {
             for res in &results_on_results {
                 match res.res_type {
                     // cannot disallow the action of a rule
-                    MaoEventResultType::Ignored | MaoEventResultType::Disallow(_) => (),
+                    MaoEventResultType::Ignored
+                    | MaoEventResultType::Disallow(_)
+                    | MaoEventResultType::ForgetSomething(_) => (),
                     MaoEventResultType::OverrideBasicRule(_)
                     | MaoEventResultType::ExecuteBeforeTurnChange(_)
                     | MaoEventResultType::ExecuteAfterTurnChange(_) => not_ignored.push(&res),
@@ -1199,7 +1217,7 @@ impl MaoCore {
                     aft(self, player_index)?;
                 }
             }
-            return Ok(disallows);
+            return Ok(wrong_interactions);
         }
         Ok(Vec::new())
     }
@@ -1441,7 +1459,10 @@ impl MaoCore {
         })
     }
 
-    fn on_draw_card(&mut self, mut card_event: CardEvent) -> Result<Vec<Disallow>, Error> {
+    fn on_draw_card(
+        &mut self,
+        mut card_event: CardEvent,
+    ) -> Result<Vec<WrongPlayerInteraction>, Error> {
         // get the stack if present otherwise get drawable stack
         let stack_index = self.verify_or_get_none_empty_drawable_stack(card_event.stack_index)?;
 
