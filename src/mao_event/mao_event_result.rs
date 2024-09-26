@@ -22,7 +22,7 @@ impl std::fmt::Display for Disallow {
 }
 
 #[derive(Clone)]
-pub enum ForgotType {
+pub enum CardPlayerActionType {
     Say,
     Do,
     Other(String),
@@ -30,19 +30,19 @@ pub enum ForgotType {
 
 const FORGOT_SAY: &str = "You forget to say something";
 const FORGOT_DO: &str = "You forget to do something";
-impl AsRef<str> for ForgotType {
+impl AsRef<str> for CardPlayerActionType {
     fn as_ref(&self) -> &str {
         match &self {
-            ForgotType::Say => FORGOT_SAY,
-            ForgotType::Do => FORGOT_DO,
-            ForgotType::Other(s) => s,
+            CardPlayerActionType::Say => FORGOT_SAY,
+            CardPlayerActionType::Do => FORGOT_DO,
+            CardPlayerActionType::Other(s) => s,
         }
     }
 }
 
 #[derive(Clone)]
 pub struct ForgotSomething {
-    pub forgot_type: ForgotType,
+    pub forgot_type: CardPlayerActionType,
     pub rule: String,
     pub penality: Option<PenalityCallbackFunction>,
 }

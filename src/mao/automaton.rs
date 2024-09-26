@@ -1,9 +1,7 @@
 use indextree::{Arena, NodeId};
 
 use crate::{
-    error::Error,
-    mao_event::mao_event_result::{Disallow, WrongPlayerInteraction},
-    stack::stack_type::StackType,
+    error::Error, mao_event::mao_event_result::WrongPlayerInteraction, stack::stack_type::StackType,
 };
 
 use super::{mao_action::MaoInteraction, mao_core::MaoCore};

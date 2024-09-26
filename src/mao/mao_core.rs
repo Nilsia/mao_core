@@ -12,7 +12,7 @@ use std::{
 
 use crate::{
     card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
-    config::{CardEffectsKey, Config},
+    config::{CardEffects, CardEffectsKey, Config, SingleCardEffect},
     error::{DmDescription, Error},
     mao_event::{
         card_event::CardEvent,
@@ -1068,32 +1068,40 @@ impl MaoCore {
                         self.update_turn(PlayerTurnChange::default());
                         return;
                     }
-                    let changes: PlayerTurnChange =
-                        match self.config.cards_effects.as_ref().and_then(|hash| {
-                            hash.get(&&CardEffectsKey::new(
-                                None,
-                                card_event.played_card.get_value().to_owned(),
+                    let changes = match self.config.cards_effects.as_ref().and_then(|hash| {
+                        hash.get(&&CardEffectsKey::new(
+                            None,
+                            card_event.played_card.get_value().to_owned(),
+                        ))
+                    }) {
+                        Some(changes) => changes.to_owned(),
+                        None => self
+                            .config
+                            .cards_effects
+                            .as_ref()
+                            .and_then(|hash| {
+                                hash.keys()
+                                    .find(|&CardEffectsKey { c_type, value }| {
+                                        c_type.is_none()
+                                            && value == card_event.played_card.get_value()
+                                    })
+                                    .and_then(|key| {
+                                        self.config.cards_effects.as_ref().unwrap().get(key)
+                                    })
+                                    .cloned()
+                            })
+                            .unwrap_or(CardEffects::SingleEffect(
+                                SingleCardEffect::PlayerTurnChange(PlayerTurnChange::default()),
                             ))
-                        }) {
-                            Some(changes) => changes.to_owned(),
-                            None => self
-                                .config
-                                .cards_effects
-                                .as_ref()
-                                .and_then(|hash| {
-                                    hash.keys()
-                                        .find(|&CardEffectsKey { c_type, value }| {
-                                            c_type.is_none()
-                                                && value == card_event.played_card.get_value()
-                                        })
-                                        .and_then(|key| {
-                                            self.config.cards_effects.as_ref().unwrap().get(key)
-                                        })
-                                        .cloned()
-                                })
-                                .unwrap_or(PlayerTurnChange::default())
-                                .to_owned(),
-                        };
+                            .to_owned(),
+                    };
+                    let changes = match changes {
+                        crate::config::CardEffects::SingleEffect(c) => match c {
+                            crate::config::SingleCardEffect::PlayerTurnChange(e) => e,
+                            crate::config::SingleCardEffect::CardPlayerAction(_) => todo!(),
+                        },
+                        crate::config::CardEffects::MultipleEffects(_) => todo!(),
+                    };
                     self.update_turn(changes);
                 }
             }
@@ -1237,22 +1245,6 @@ impl MaoCore {
         self.on_event(&event)?;
         self.player_events.clear();
         Ok(())
-    }
-
-    /// Returns all top cards of the Playable [`Stack`]s as String followed by the index of the stack
-    pub fn all_top_card_playable_stacks_string(&self) -> Vec<(usize, String)> {
-        self.get_playable_stacks()
-            .iter()
-            .map(|(i, stack)| {
-                (
-                    *i,
-                    stack
-                        .top()
-                        .map(|v| v.to_string())
-                        .unwrap_or(String::from("empty")),
-                )
-            })
-            .collect()
     }
 
     /// Add a new [`Card`] into the `target` according to [`StackTarget`]

@@ -48,6 +48,7 @@ impl CommonCardType {
             CommonCardType::Diamond | CommonCardType::Heart => CardColor::Red,
         }
     }
+
     pub fn to_card_string(&self) -> String {
         // returns a one or two character string for the card graphics
         match self {

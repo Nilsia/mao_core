@@ -62,15 +62,6 @@ impl Stack {
         if self.stack_type.contains(&StackType::Drawable) {}
         self.cards.pop()
     }
-
-    /// Returns the top card of the stack as a graphical string
-    /// the returned card can be either empty, backed or fronted
-    pub fn top_string(&self) -> String {
-        match self.top() {
-            Some(card) => card.to_string_custom(self.visible),
-            None => Card::empty_card(),
-        }
-    }
 }
 
 impl std::ops::Deref for Stack {

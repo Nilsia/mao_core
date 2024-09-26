@@ -10,6 +10,22 @@ pub enum CardType {
     Rule,
     Jocker { desc: String, color: CardColor },
 }
+impl CardType {
+    // Returns a one or two character string for the card graphics
+    pub fn to_card_string(&self) -> String {
+        match self {
+            CardType::Common(color_type) => color_type.to_card_string(),
+            CardType::Rule => "♯".to_string(), // trouver un caracter de rêgle (l'outil pour mesurer) à mettre à la place
+            CardType::Jocker { color, .. } => {
+                if color == &CardColor::Red {
+                    format!("\x1b{}\x1b{}", RED, RESET)
+                } else {
+                    "J".to_string()
+                }
+            }
+        }
+    }
+}
 
 impl Default for CardType {
     fn default() -> Self {
@@ -33,23 +49,6 @@ impl FromStr for CardType {
             },
             _ => Self::Common(CommonCardType::from_str(value)?),
         })
-    }
-}
-
-impl CardType {
-    // Returns a one or two character string for the card graphics
-    pub fn to_card_string(&self) -> String {
-        match self {
-            CardType::Common(color_type) => color_type.to_card_string(),
-            CardType::Rule => "♯".to_string(), // trouver un caracter de rêgle (l'outil pour mesurer) à mettre à la place
-            CardType::Jocker { color, .. } => {
-                if color == &CardColor::Red {
-                    format!("\x1b{}\x1b{}", RED, RESET)
-                } else {
-                    "J".to_string()
-                }
-            }
-        }
     }
 }
 

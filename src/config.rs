@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, fmt, marker::PhantomData, path::PathBuf, str::FromStr};
 
 use crate::{
     card::{card_type::CardType, card_value::CardValue},
@@ -6,23 +6,43 @@ use crate::{
     mao::mao_core::PlayerTurnChange,
 };
 
-use serde::Deserialize;
+use serde::{
+    de::{self, Visitor},
+    Deserialize, Deserializer,
+};
 
 #[derive(Default, Clone, Deserialize, Debug)]
 pub struct Config {
     pub dirname: String,
-    pub cards_effects: Option<HashMap<CardEffectsKey, PlayerTurnChange>>,
+    pub cards_effects: Option<HashMap<CardEffectsKey, CardEffects>>,
 }
 
 impl Config {
-    pub fn verify(&self) -> Result<(), Error> {
+    pub fn verify(&mut self) -> Result<(), Error> {
         let path = PathBuf::from(&self.dirname);
         if !path.is_dir() {
             return Err(Error::InvalidConfig {
                 desc: String::from("Provided path is not a directory"),
             });
         }
+        self.clear();
         Ok(())
+    }
+
+    /// Removes unecessary values
+    fn clear(&mut self) {
+        if let Some(values) = self.cards_effects.as_mut().map(|hash| hash.values_mut()) {
+            for value in values {
+                match value {
+                    CardEffects::SingleEffect(single) => single.clear(),
+                    CardEffects::MultipleEffects(v) => {
+                        for single_card_effect in v {
+                            single_card_effect.clear()
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -80,4 +100,214 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsKeyVisitor {
         v.parse::<CardEffectsKey>()
             .map_err(serde::de::Error::custom)
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum SingOrMult<T>
+where
+    T: std::fmt::Debug + Clone,
+{
+    Single(T),
+    Multiple(Vec<T>),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct CardPlayerAction {
+    #[serde(rename = "values")]
+    pub has_to_contains: Vec<SingOrMult<String>>,
+}
+
+impl<'de> Deserialize<'de> for SingOrMult<String> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct SingOrMultVisitor;
+        impl<'dee> Visitor<'dee> for SingOrMultVisitor {
+            type Value = SingOrMult<String>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                todo!()
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(SingOrMult::Single(v.to_owned()))
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'dee>,
+            {
+                let mut data = match seq.size_hint() {
+                    Some(sisze) => Vec::with_capacity(sisze),
+                    None => vec![],
+                };
+                while let Some(value) = seq.next_element::<String>()? {
+                    data.push(value);
+                }
+                if data.len() == 1 {
+                    Ok(SingOrMult::Single(data.pop().unwrap()))
+                } else {
+                    Ok(SingOrMult::Multiple(data))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(SingOrMultVisitor)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum SingleCardEffect {
+    PlayerTurnChange(PlayerTurnChange),
+    CardPlayerAction(CardPlayerAction),
+}
+
+impl SingleCardEffect {
+    pub fn clear(&mut self) {
+        match self {
+            SingleCardEffect::PlayerTurnChange(_) => (),
+            SingleCardEffect::CardPlayerAction(a) => {
+                println!("found SingOrMult");
+                a.has_to_contains.retain(|v| match v {
+                    SingOrMult::Single(_) => true,
+                    SingOrMult::Multiple(v) => !v.is_empty(),
+                })
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SingleCardEffect {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct SingleCardEffectVisitor;
+        impl<'dee> serde::de::Visitor<'dee> for SingleCardEffectVisitor {
+            type Value = SingleCardEffect;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                todo!()
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                SingleCardEffect::from_str(v).map_err(serde::de::Error::custom)
+            }
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'dee>,
+            {
+                CardPlayerAction::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+                    .map(|v| SingleCardEffect::CardPlayerAction(v))
+            }
+        }
+        deserializer.deserialize_any(SingleCardEffectVisitor)
+    }
+}
+
+impl FromStr for SingleCardEffect {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<PlayerTurnChange>()
+            .map(|v| Self::PlayerTurnChange(v))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum CardEffects {
+    SingleEffect(SingleCardEffect),
+    MultipleEffects(Vec<SingleCardEffect>),
+}
+
+struct CardEffectsVisitor;
+
+impl<'de> Deserialize<'de> for CardEffects {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(CardEffectsVisitor)
+    }
+}
+
+impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
+    type Value = CardEffects;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a card effect is wrong")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        v.parse::<SingleCardEffect>()
+            .map_err(serde::de::Error::custom)
+            .map(|v| CardEffects::SingleEffect(v))
+    }
+
+    fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::MapAccess<'de>,
+    {
+        CardPlayerAction::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+            .map(|v| CardEffects::SingleEffect(SingleCardEffect::CardPlayerAction(v)))
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        let mut data: Vec<SingleCardEffect> = match seq.size_hint() {
+            Some(s) => Vec::with_capacity(s),
+            None => vec![],
+        };
+        while let Some(value) = seq.next_element::<SingleCardEffect>()? {
+            data.push(value);
+        }
+        Ok(CardEffects::MultipleEffects(data))
+    }
+}
+
+fn string_or_seq<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+where
+    T: Deserialize<'de> + FromStr<Err = anyhow::Error>,
+    D: Deserializer<'de>,
+{
+    struct StringOrStruct<T>(PhantomData<fn() -> T>);
+
+    impl<'de, T> Visitor<'de> for StringOrStruct<T>
+    where
+        T: Deserialize<'de> + FromStr<Err = anyhow::Error>,
+    {
+        type Value = T;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("string or seq")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<T, E>
+        where
+            E: de::Error,
+        {
+            Ok(FromStr::from_str(value).unwrap())
+        }
+
+        fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: de::SeqAccess<'de>,
+        {
+            Deserialize::deserialize(de::value::SeqAccessDeserializer::new(seq))
+        }
+    }
+
+    deserializer.deserialize_any(StringOrStruct(PhantomData))
 }
