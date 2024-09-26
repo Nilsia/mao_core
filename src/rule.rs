@@ -41,7 +41,7 @@ impl Rule {
                 .split(".")
                 .map(String::from)
                 .collect::<Vec<String>>()
-                .get(0)
+                .first()
                 .unwrap()
                 .to_owned(),
         }

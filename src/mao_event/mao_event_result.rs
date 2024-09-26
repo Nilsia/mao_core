@@ -49,12 +49,7 @@ pub struct ForgotSomething {
 
 impl std::fmt::Display for ForgotSomething {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}: {}",
-            self.rule.to_string(),
-            self.forgot_type.as_ref()
-        )
+        write!(f, "{}: {}", self.rule, self.forgot_type.as_ref())
     }
 }
 

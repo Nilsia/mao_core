@@ -46,7 +46,7 @@ impl MaoEvent {
             MaoEvent::PlayedCardEvent(ref e) => Some(&e.played_card),
             MaoEvent::DiscardCardEvent(ref e) => Some(&e.played_card),
             MaoEvent::DrawedCardEvent(ref e) => Some(&e.played_card),
-            MaoEvent::GiveCardEvent { card, .. } => Some(&card),
+            MaoEvent::GiveCardEvent { card, .. } => Some(card),
             MaoEvent::StackPropertyRunsOut { .. } => None,
             MaoEvent::GameStart => None,
             MaoEvent::EndPlayerTurn { .. } => None,

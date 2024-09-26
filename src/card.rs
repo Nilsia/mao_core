@@ -37,7 +37,7 @@ impl Card {
     }
 
     pub fn get_rule(&self) -> Option<&str> {
-        self.rule.as_ref().map(|x| x.as_str())
+        self.rule.as_deref()
     }
 
     pub fn owner_can_see_it(&self) -> bool {

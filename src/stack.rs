@@ -59,7 +59,6 @@ impl Stack {
     }
 
     pub fn draw_card(&mut self) -> Option<Card> {
-        if self.stack_type.contains(&StackType::Drawable) {}
         self.cards.pop()
     }
 }

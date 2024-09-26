@@ -105,7 +105,7 @@ pub struct Automaton {
 
 impl std::fmt::Debug for Automaton {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "current state id : {}\n", self.current_state)?;
+        writeln!(f, "current state id : {}", self.current_state)?;
         write!(f, "{}", self.current_state.debug_pretty_print(&self.arena))
     }
 }
@@ -198,7 +198,7 @@ impl Automaton {
             .iter()
             .map(|&id| self.arena.get(id).unwrap().get())
             .collect();
-        if leaves.contains(&&last) {
+        if leaves.contains(&last) {
             panic!("Cannot add node {last:?} because it is already present inside Self");
         } else {
             parent.append_value(last.to_owned(), &mut self.arena);
@@ -208,7 +208,7 @@ impl Automaton {
     /// Cancels the last action and returns the previous action if exists
     /// set `self.current_state` if not initial state
     pub fn cancel_last(&mut self) -> Option<&NodeState> {
-        if let Some(parent) = self.current_state.ancestors(&mut self.arena).skip(1).next() {
+        if let Some(parent) = self.current_state.ancestors(&self.arena).nth(1) {
             let save = self.current_state;
             self.current_state = parent;
             return Some(self.arena.get(save).unwrap().get());
@@ -232,7 +232,7 @@ impl Automaton {
                                 .map(|&v| v.action.to_owned())
                                 .collect();
                             interactions.push(interaction);
-                            return Ok(MaoInteractionResult::Leaf { interactions, func });
+                            Ok(MaoInteractionResult::Leaf { interactions, func })
                         }
                         // is a node so advance in it
                         None => {
@@ -245,7 +245,7 @@ impl Automaton {
                                 .get_mut()
                                 .action
                                 .index = interaction.index;
-                            return Ok(MaoInteractionResult::AdvancedNextState);
+                            Ok(MaoInteractionResult::AdvancedNextState)
                         }
                     },
                     // index is invalid
@@ -257,19 +257,17 @@ impl Automaton {
                 }
             }
             // not nodes
-            _ => Err(Error::OnMaoInteraction(format!(
-                "Provided index does not lead to multiple nodes"
-            ))),
+            _ => Err(Error::OnMaoInteraction(
+                "Provided index does not lead to multiple nodes".to_owned(),
+            )),
         }
     }
 
-    fn put_node_at_end(nodes: &mut Vec<&NodeState>) {
+    fn put_node_at_end(nodes: &mut [&NodeState]) {
         if let Some(index) = nodes
             .iter()
             .enumerate()
-            .filter(|(_, v)| v.func.is_none())
-            .next()
-            .map(|v| v.0)
+            .find_map(|(i, v)| v.func.is_none().then_some(i))
         {
             let len = nodes.len();
             nodes.swap(index, len.saturating_sub(1));
@@ -347,7 +345,7 @@ impl Automaton {
             .parent()
             .is_none()
         {
-            return None;
+            None
         } else {
             Some(
                 self.arena
@@ -403,7 +401,7 @@ impl Automaton {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     fn verify_action_path(datas: &[NodeState]) {
@@ -443,7 +441,7 @@ impl Automaton {
         }
     }
 
-    pub fn remove_paths<'a, T>(&mut self, paths: T)
+    pub fn remove_paths<T>(&mut self, paths: T)
     where
         T: IntoIterator,
         T::Item: AsMut<Vec<NodeState>> + AsRef<Vec<NodeState>>,
@@ -458,7 +456,7 @@ impl Automaton {
 
             if let Some(node_ids) = node_ids {
                 for node_id in node_ids.iter().rev() {
-                    if self.children_of(*node_id).len() == 0 {
+                    if self.children_of(*node_id).is_empty() {
                         node_id.remove(&mut self.arena);
                     }
                 }

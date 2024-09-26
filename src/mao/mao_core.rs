@@ -53,9 +53,9 @@ impl FromStr for PlayerTurnUpdater {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let splitted: Vec<&str> = s.split('_').collect();
         match splitted.len() {
-            2 => match splitted.first().unwrap() {
-                &"set" => Ok(Self::Set(splitted.last().unwrap().parse()?)),
-                &"up" => Ok(Self::Update(splitted.last().unwrap().parse()?)),
+            2 => match *splitted.first().unwrap() {
+                "set" => Ok(Self::Set(splitted.last().unwrap().parse()?)),
+                "up" => Ok(Self::Update(splitted.last().unwrap().parse()?)),
                 _ => Err(anyhow::anyhow!(
                     "Invalid identifier (1) for PlayerTurnUpdater"
                 )),
@@ -113,9 +113,9 @@ impl FromStr for PlayerTurnChange {
             3 => {
                 let updater =
                     (splitted[1].to_string() + "_" + splitted[2]).parse::<PlayerTurnUpdater>()?;
-                match splitted.first().unwrap() {
-                    &"up" => Ok(Self::Update(updater)),
-                    &"ro" => Ok(Self::Rotate(updater)),
+                match *splitted.first().unwrap() {
+                    "up" => Ok(Self::Update(updater)),
+                    "ro" => Ok(Self::Rotate(updater)),
                     _ => Err(anyhow::anyhow!(
                         "Invalid identifier when parsing first item"
                     )),
@@ -479,7 +479,7 @@ impl MaoCore {
         let wrong_int = self.propagate_on_event_results_and_execute(
             card_event.player_index,
             &event,
-            &res.iter().map(|v| v).collect::<Vec<&MaoEventResult>>(),
+            &res.iter().collect::<Vec<&MaoEventResult>>(),
         )?;
         if !wrong_int.is_empty() {
             for int in &wrong_int {
@@ -641,7 +641,7 @@ impl MaoCore {
             // all stack are empty
             if !drawable_stacks
                 .iter()
-                .any(|(_, stack)| stack.get_cards().len() != 0)
+                .any(|(_, stack)| !stack.get_cards().is_empty())
             {
                 if empty_first {
                     return Err(Error::NotEnoughCards);
@@ -807,7 +807,7 @@ impl MaoCore {
             .filter(|rule| rule.1.light_filename() == rule_light_filename)
             .collect::<Vec<(usize, &Rule)>>()
             .first()
-            .map(|v| *v)
+            .cloned()
     }
 
     /// Returns the stacks which contain the given `stack_types` with their index
@@ -1021,11 +1021,7 @@ impl MaoCore {
 
     pub fn init_all_players(&mut self, nb_card: usize) -> Result<(), Error> {
         for i in 0..self.players.len() {
-            let cards: Vec<Card> = self
-                .draw_multiple_cards_unchosen(nb_card)?
-                .iter()
-                .cloned()
-                .collect();
+            let cards: Vec<Card> = self.draw_multiple_cards_unchosen(nb_card)?.to_vec();
             self.players
                 .get_mut(i)
                 .unwrap()
@@ -1069,7 +1065,7 @@ impl MaoCore {
                         return;
                     }
                     let changes = match self.config.cards_effects.as_ref().and_then(|hash| {
-                        hash.get(&&CardEffectsKey::new(
+                        hash.get(&CardEffectsKey::new(
                             None,
                             card_event.played_card.get_value().to_owned(),
                         ))
@@ -1138,7 +1134,7 @@ impl MaoCore {
                 .available_rules
                 .get(self.activated_rules[i])
                 .unwrap()
-                .get_on_event_func()(&event, self)?);
+                .get_on_event_func()(event, self)?);
         }
         Ok(results)
     }
@@ -1181,7 +1177,7 @@ impl MaoCore {
             let mut results_on_results = Vec::new();
             for res in event_results {
                 if let Some(func) = res.other_rules_callback.as_ref() {
-                    results_on_results.push(func(self, &previous_event, &not_ignored)?);
+                    results_on_results.push(func(self, previous_event, &not_ignored)?);
                 }
             }
             for res in &results_on_results {
@@ -1192,7 +1188,7 @@ impl MaoCore {
                     | MaoEventResultType::ForgetSomething(_) => (),
                     MaoEventResultType::OverrideBasicRule(_)
                     | MaoEventResultType::ExecuteBeforeTurnChange(_)
-                    | MaoEventResultType::ExecuteAfterTurnChange(_) => not_ignored.push(&res),
+                    | MaoEventResultType::ExecuteAfterTurnChange(_) => not_ignored.push(res),
                 }
             }
 
@@ -1207,8 +1203,8 @@ impl MaoCore {
                     ),
                     |(mut bef, mut aft), v| {
                         match &v.res_type {
-                            MaoEventResultType::ExecuteBeforeTurnChange(f) => bef.push(&f),
-                            MaoEventResultType::ExecuteAfterTurnChange(f) => aft.push(&f),
+                            MaoEventResultType::ExecuteBeforeTurnChange(f) => bef.push(f),
+                            MaoEventResultType::ExecuteAfterTurnChange(f) => aft.push(f),
                             _ => (),
                         }
                         (bef, aft)
@@ -1257,7 +1253,8 @@ impl MaoCore {
         target_index: StackTarget,
         card: Card,
     ) -> Result<(), Error> {
-        Ok(self.get_stack_target(target_index)?.add_card(card))
+        self.get_stack_target(target_index)?.add_card(card);
+        Ok(())
     }
 
     /// if `stack_index` is None, the first drawable stack will be gotten
@@ -1285,10 +1282,11 @@ impl MaoCore {
             let event = MaoEvent::StackPropertyRunsOut {
                 empty_stack_index: StackTarget::Stack(stack_index),
             };
-            if self.on_event(&event)?.iter().any(|r| match r.res_type {
-                MaoEventResultType::Ignored => false,
-                _ => true,
-            }) {
+            if self
+                .on_event(&event)?
+                .iter()
+                .any(|r| !matches!(r.res_type, MaoEventResultType::Ignored))
+            {
                 return Ok(());
             }
         }

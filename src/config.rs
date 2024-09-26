@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, marker::PhantomData, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr};
 
 use crate::{
     card::{card_type::CardType, card_value::CardValue},
@@ -64,13 +64,13 @@ impl FromStr for CardEffectsKey {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let splitted: Vec<&str> = s.split('_').collect();
         match splitted.len() {
-            0 => return Err(anyhow::anyhow!("Invalid key for a card effect")),
+            0 => Err(anyhow::anyhow!("Invalid key for a card effect")),
             1 => Ok(CardEffectsKey::new(None, s.parse::<CardValue>()?)),
             2 => Ok(CardEffectsKey::new(
                 Some(splitted.first().unwrap().parse::<CardType>()?),
                 splitted.last().unwrap().parse::<CardValue>()?,
             )),
-            _ => return Err(anyhow::anyhow!("Too many objects for key of card effect")),
+            _ => Err(anyhow::anyhow!("Too many objects for key of card effect")),
         }
     }
 }
@@ -127,7 +127,7 @@ impl<'de> Deserialize<'de> for SingOrMult<String> {
             type Value = SingOrMult<String>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                todo!()
+                write!(formatter, "deserializing SingOrMult<String>")
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -191,7 +191,7 @@ impl<'de> Deserialize<'de> for SingleCardEffect {
             type Value = SingleCardEffect;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                todo!()
+                write!(formatter, "deserializing SingleCardEffect")
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -205,7 +205,7 @@ impl<'de> Deserialize<'de> for SingleCardEffect {
                 A: serde::de::MapAccess<'dee>,
             {
                 CardPlayerAction::deserialize(serde::de::value::MapAccessDeserializer::new(map))
-                    .map(|v| SingleCardEffect::CardPlayerAction(v))
+                    .map(SingleCardEffect::CardPlayerAction)
             }
         }
         deserializer.deserialize_any(SingleCardEffectVisitor)
@@ -216,8 +216,7 @@ impl FromStr for SingleCardEffect {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<PlayerTurnChange>()
-            .map(|v| Self::PlayerTurnChange(v))
+        s.parse::<PlayerTurnChange>().map(Self::PlayerTurnChange)
     }
 }
 
@@ -251,7 +250,7 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
     {
         v.parse::<SingleCardEffect>()
             .map_err(serde::de::Error::custom)
-            .map(|v| CardEffects::SingleEffect(v))
+            .map(CardEffects::SingleEffect)
     }
 
     fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
@@ -275,39 +274,4 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
         }
         Ok(CardEffects::MultipleEffects(data))
     }
-}
-
-fn string_or_seq<'de, T, D>(deserializer: D) -> Result<T, D::Error>
-where
-    T: Deserialize<'de> + FromStr<Err = anyhow::Error>,
-    D: Deserializer<'de>,
-{
-    struct StringOrStruct<T>(PhantomData<fn() -> T>);
-
-    impl<'de, T> Visitor<'de> for StringOrStruct<T>
-    where
-        T: Deserialize<'de> + FromStr<Err = anyhow::Error>,
-    {
-        type Value = T;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("string or seq")
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<T, E>
-        where
-            E: de::Error,
-        {
-            Ok(FromStr::from_str(value).unwrap())
-        }
-
-        fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
-        where
-            A: de::SeqAccess<'de>,
-        {
-            Deserialize::deserialize(de::value::SeqAccessDeserializer::new(seq))
-        }
-    }
-
-    deserializer.deserialize_any(StringOrStruct(PhantomData))
 }
