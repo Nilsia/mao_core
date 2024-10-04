@@ -111,9 +111,12 @@ where
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct CardPlayerAction {
-    #[serde(rename = "values")]
-    pub has_to_contains: Vec<SingOrMult<String>>,
+#[serde(tag = "type", content = "values")]
+pub enum CardPlayerAction {
+    #[serde(alias = "say")]
+    Say(Vec<SingOrMult<String>>),
+    #[serde(alias = "physical")]
+    Physical(String),
 }
 
 impl<'de> Deserialize<'de> for SingOrMult<String> {
@@ -169,13 +172,13 @@ impl SingleCardEffect {
     pub fn clear(&mut self) {
         match self {
             SingleCardEffect::PlayerTurnChange(_) => (),
-            SingleCardEffect::CardPlayerAction(a) => {
-                println!("found SingOrMult");
-                a.has_to_contains.retain(|v| match v {
+            SingleCardEffect::CardPlayerAction(a) => match a {
+                CardPlayerAction::Say(c) => c.retain(|v| match v {
                     SingOrMult::Single(_) => true,
                     SingOrMult::Multiple(v) => !v.is_empty(),
-                })
-            }
+                }),
+                CardPlayerAction::Physical(_) => (),
+            },
         }
     }
 }
