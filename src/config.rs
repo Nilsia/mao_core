@@ -14,7 +14,8 @@ use serde::{
 #[derive(Default, Clone, Deserialize, Debug)]
 pub struct Config {
     pub dirname: String,
-    pub cards_effects: Option<HashMap<CardEffectsKey, CardEffects>>,
+    #[serde(default)]
+    pub cards_effects: HashMap<CardEffectsKey, CardEffects>,
 }
 
 impl Config {
@@ -31,14 +32,12 @@ impl Config {
 
     /// Removes unecessary values
     fn clear(&mut self) {
-        if let Some(values) = self.cards_effects.as_mut().map(|hash| hash.values_mut()) {
-            for value in values {
-                match value {
-                    CardEffects::SingleEffect(single) => single.clear(),
-                    CardEffects::MultipleEffects(v) => {
-                        for single_card_effect in v {
-                            single_card_effect.clear()
-                        }
+        for value in self.cards_effects.values_mut() {
+            match value {
+                CardEffects::SingleEffect(single) => single.clear(),
+                CardEffects::MultipleEffects(v) => {
+                    for single_card_effect in v {
+                        single_card_effect.clear()
                     }
                 }
             }

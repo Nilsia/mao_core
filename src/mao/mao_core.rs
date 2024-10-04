@@ -1064,32 +1064,27 @@ impl MaoCore {
                         self.update_turn(PlayerTurnChange::default());
                         return;
                     }
-                    let changes = match self.config.cards_effects.as_ref().and_then(|hash| {
-                        hash.get(&CardEffectsKey::new(
-                            None,
-                            card_event.played_card.get_value().to_owned(),
-                        ))
-                    }) {
+                    let changes = match self.config.cards_effects.get(&CardEffectsKey::new(
+                        None,
+                        card_event.played_card.get_value().to_owned(),
+                    )) {
                         Some(changes) => changes.to_owned(),
                         None => self
                             .config
                             .cards_effects
-                            .as_ref()
-                            .and_then(|hash| {
-                                hash.keys()
-                                    .find(|&CardEffectsKey { c_type, value }| {
-                                        c_type.is_none()
-                                            && value == card_event.played_card.get_value()
-                                    })
-                                    .and_then(|key| {
-                                        self.config.cards_effects.as_ref().unwrap().get(key)
-                                    })
-                                    .cloned()
+                            .iter()
+                            .find_map(|(card_key, card_effect)| {
+                                if card_key.c_type.is_none()
+                                    && &card_key.value == card_event.played_card.get_value()
+                                {
+                                    Some(card_effect.to_owned())
+                                } else {
+                                    None
+                                }
                             })
                             .unwrap_or(CardEffects::SingleEffect(
                                 SingleCardEffect::PlayerTurnChange(PlayerTurnChange::default()),
-                            ))
-                            .to_owned(),
+                            )),
                     };
                     let changes = match changes {
                         crate::config::CardEffects::SingleEffect(c) => match c {
