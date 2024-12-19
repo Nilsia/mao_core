@@ -26,6 +26,13 @@ pub enum PlayerAction {
     SelectDrawableStack,
     SelectDiscardableStack,
     SelectRule,
+    DoAction,
+}
+
+impl From<&MaoInteraction> for PlayerAction {
+    fn from(value: &MaoInteraction) -> Self {
+        value.action.to_owned()
+    }
 }
 
 impl From<StackType> for PlayerAction {
@@ -50,6 +57,7 @@ impl std::fmt::Display for PlayerAction {
                 PlayerAction::SelectDrawableStack => "drawable stack",
                 PlayerAction::SelectDiscardableStack => "discardable stack",
                 PlayerAction::SelectRule => "rule",
+                PlayerAction::DoAction => "do action",
             }
         )
     }
@@ -244,7 +252,7 @@ impl Automaton {
                                 .unwrap()
                                 .get_mut()
                                 .action
-                                .index = interaction.index;
+                                .data = interaction.data;
                             Ok(MaoInteractionResult::AdvancedNextState)
                         }
                     },
@@ -309,7 +317,7 @@ impl Automaton {
                         .unwrap()
                         .get_mut()
                         .action
-                        .index = interaction.index;
+                        .data = interaction.data;
                     MaoInteractionResult::AdvancedNextState
                 }
             },

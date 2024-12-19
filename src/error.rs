@@ -62,6 +62,7 @@ pub enum Error {
     RuleNotActivated {
         rule_name: String,
     },
+    InvalidExpectingValue(String),
 }
 
 impl Error {
@@ -150,6 +151,7 @@ impl std::fmt::Display for Error {
                     rule_name
                 )
             }
+            Error::InvalidExpectingValue(s) => f.write_str(s),
         }
     }
 }

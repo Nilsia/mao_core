@@ -1,14 +1,42 @@
+use crate::error::Error;
+
 use super::automaton::PlayerAction;
+
+#[derive(Clone, PartialEq, Eq, Debug, PartialOrd, Ord)]
+pub enum IdString {
+    String(String),
+    Index(usize),
+}
+
+impl IdString {
+    pub fn index_expecting(&self) -> Result<usize, Error> {
+        match self {
+            IdString::String(_) => Err(Error::InvalidExpectingValue(
+                "Expecting index found String".to_owned(),
+            )),
+            IdString::Index(i) => Ok(*i),
+        }
+    }
+
+    pub fn string_expecting(&self) -> Result<&str, Error> {
+        match self {
+            IdString::String(s) => Ok(s),
+            IdString::Index(_) => Err(Error::InvalidExpectingValue(
+                "Expecting string found index".to_owned(),
+            )),
+        }
+    }
+}
 
 #[derive(Clone, PartialEq, Eq, Debug, Default, PartialOrd, Ord)]
 pub struct MaoInteraction {
-    pub index: Option<usize>,
+    pub data: Option<IdString>,
     pub action: PlayerAction,
 }
 
 impl MaoInteraction {
-    pub fn new(index: Option<usize>, action: PlayerAction) -> Self {
-        Self { index, action }
+    pub fn new(data: Option<IdString>, action: PlayerAction) -> Self {
+        Self { data, action }
     }
 }
 impl std::fmt::Display for MaoInteraction {
@@ -23,9 +51,13 @@ impl std::fmt::Display for MaoInteraction {
                 PlayerAction::SelectDrawableStack => "DrawableStack",
                 PlayerAction::SelectDiscardableStack => "DiscardableStack",
                 PlayerAction::SelectRule => "Rule",
+                PlayerAction::DoAction => "DoAction",
             },
-            self.index
-                .map_or("new".to_string(), |v| (v + 1).to_string())
+            self.data.as_ref().map_or("new".to_string(), |v| match v {
+                IdString::String(s) => s.to_owned(),
+                IdString::Index(v) => (v + 1).to_string(),
+            }
+            .to_string())
         )
     }
 }

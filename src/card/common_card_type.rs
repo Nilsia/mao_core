@@ -15,9 +15,9 @@ impl FromStr for CommonCardType {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "spade" => Ok(Self::Heart),
-            "diamond" => Ok(Self::Heart),
-            "club" => Ok(Self::Heart),
+            "spade" => Ok(Self::Spade),
+            "diamond" => Ok(Self::Diamond),
+            "club" => Ok(Self::Club),
             "heart" => Ok(Self::Heart),
             _ => Err(anyhow::anyhow!(
                 "Invalid parsing for {value} into CommonCardType"

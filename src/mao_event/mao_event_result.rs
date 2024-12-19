@@ -21,7 +21,7 @@ impl std::fmt::Display for Disallow {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum CardPlayerActionType {
     Say,
     Do,
@@ -40,16 +40,25 @@ impl AsRef<str> for CardPlayerActionType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ForgotSomething {
+    pub msg: Option<String>,
     pub forgot_type: CardPlayerActionType,
-    pub rule: String,
+    pub rule: Option<String>,
     pub penality: Option<PenalityCallbackFunction>,
+    pub player_pseudo: String,
 }
 
 impl std::fmt::Display for ForgotSomething {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.rule, self.forgot_type.as_ref())
+        let basic = "basic";
+        write!(
+            f,
+            "{}: {} ({})",
+            self.player_pseudo,
+            self.forgot_type.as_ref(),
+            self.rule.as_deref().unwrap_or(basic),
+        )
     }
 }
 
@@ -98,12 +107,50 @@ impl MaoEventResult {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum WrongPlayerInteraction {
     /// The event has been disallowed by the rule
     Disallow(Disallow),
     /// The player forgot to do/say/... something
     ForgotSomething(ForgotSomething),
+}
+
+impl WrongPlayerInteraction {
+    pub fn forgot_doing(
+        msg: Option<String>,
+        rule: Option<String>,
+        penality: Option<PenalityCallbackFunction>,
+        player_pseudo: &str,
+    ) -> Self {
+        Self::ForgotSomething(ForgotSomething {
+            forgot_type: CardPlayerActionType::Do,
+            rule,
+            penality,
+            msg,
+            player_pseudo: player_pseudo.to_owned(),
+        })
+    }
+    pub fn forgot_saying(
+        msg: Option<String>,
+        rule: Option<String>,
+        penality: Option<PenalityCallbackFunction>,
+        player_pseudo: &str,
+    ) -> Self {
+        Self::ForgotSomething(ForgotSomething {
+            forgot_type: CardPlayerActionType::Say,
+            rule,
+            penality,
+            msg,
+            player_pseudo: player_pseudo.to_owned(),
+        })
+    }
+
+    pub(crate) fn forgot_saying_basic(msg: Option<String>, player_pseudo: &str) -> Self {
+        Self::forgot_saying(msg, None, None, player_pseudo)
+    }
+    pub(crate) fn forgot_doing_basic(msg: Option<String>, player_pseudo: &str) -> Self {
+        Self::forgot_doing(msg, None, None, player_pseudo)
+    }
 }
 
 impl std::fmt::Display for WrongPlayerInteraction {

@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    path::PathBuf,
+    str::FromStr,
+};
 
 use crate::{
     card::{card_type::CardType, card_value::CardValue},
@@ -19,6 +24,29 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn get_all_physical_actions(&self) -> HashSet<String> {
+        let mut actions = HashSet::new();
+        let mut match_single_card_effect = |card_effect: &SingleCardEffect| match card_effect {
+            SingleCardEffect::PlayerTurnChange(_) => (),
+            SingleCardEffect::CardPlayerAction(cpa) => match cpa {
+                CardPlayerAction::Say(_) => (),
+                CardPlayerAction::Physical(p) => {
+                    actions.insert(p.to_owned());
+                }
+            },
+        };
+        for effects in self.cards_effects.values() {
+            match effects {
+                SingOrMult::Single(s) => match_single_card_effect(s),
+                SingOrMult::Multiple(v_s) => {
+                    for s in v_s {
+                        match_single_card_effect(s)
+                    }
+                }
+            }
+        }
+        actions.into_iter().collect()
+    }
     pub fn verify(&mut self) -> Result<(), Error> {
         let path = PathBuf::from(&self.dirname);
         if !path.is_dir() {
@@ -34,8 +62,8 @@ impl Config {
     fn clear(&mut self) {
         for value in self.cards_effects.values_mut() {
             match value {
-                CardEffects::SingleEffect(single) => single.clear(),
-                CardEffects::MultipleEffects(v) => {
+                CardEffects::Single(single) => single.clear(),
+                CardEffects::Multiple(v) => {
                     for single_card_effect in v {
                         single_card_effect.clear()
                     }
@@ -48,11 +76,11 @@ impl Config {
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct CardEffectsKey {
     pub c_type: Option<CardType>,
-    pub value: CardValue,
+    pub value: Option<CardValue>,
 }
 
 impl CardEffectsKey {
-    pub fn new(c_type: Option<CardType>, value: CardValue) -> Self {
+    pub fn new(c_type: Option<CardType>, value: Option<CardValue>) -> Self {
         Self { c_type, value }
     }
 }
@@ -60,14 +88,23 @@ impl CardEffectsKey {
 impl FromStr for CardEffectsKey {
     type Err = anyhow::Error;
 
+    /// Values_Type
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let splitted: Vec<&str> = s.split('_').collect();
         match splitted.len() {
             0 => Err(anyhow::anyhow!("Invalid key for a card effect")),
-            1 => Ok(CardEffectsKey::new(None, s.parse::<CardValue>()?)),
+            1 => {
+                let card_effect =
+                    CardEffectsKey::new(s.parse::<CardType>().ok(), s.parse::<CardValue>().ok());
+                if card_effect.value.is_none() == card_effect.c_type.is_none() {
+                    s.parse::<CardType>()?;
+                    s.parse::<CardValue>()?;
+                }
+                Ok(card_effect)
+            }
             2 => Ok(CardEffectsKey::new(
-                Some(splitted.first().unwrap().parse::<CardType>()?),
-                splitted.last().unwrap().parse::<CardValue>()?,
+                Some(splitted.last().unwrap().parse::<CardType>()?),
+                Some(splitted.first().unwrap().parse::<CardValue>()?),
             )),
             _ => Err(anyhow::anyhow!("Too many objects for key of card effect")),
         }
@@ -222,11 +259,7 @@ impl FromStr for SingleCardEffect {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum CardEffects {
-    SingleEffect(SingleCardEffect),
-    MultipleEffects(Vec<SingleCardEffect>),
-}
+pub type CardEffects = SingOrMult<SingleCardEffect>;
 
 struct CardEffectsVisitor;
 
@@ -252,7 +285,7 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
     {
         v.parse::<SingleCardEffect>()
             .map_err(serde::de::Error::custom)
-            .map(CardEffects::SingleEffect)
+            .map(CardEffects::Single)
     }
 
     fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
@@ -260,7 +293,7 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
         A: serde::de::MapAccess<'de>,
     {
         CardPlayerAction::deserialize(serde::de::value::MapAccessDeserializer::new(map))
-            .map(|v| CardEffects::SingleEffect(SingleCardEffect::CardPlayerAction(v)))
+            .map(|v| CardEffects::Single(SingleCardEffect::CardPlayerAction(v)))
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
@@ -274,6 +307,6 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
         while let Some(value) = seq.next_element::<SingleCardEffect>()? {
             data.push(value);
         }
-        Ok(CardEffects::MultipleEffects(data))
+        Ok(CardEffects::Multiple(data))
     }
 }

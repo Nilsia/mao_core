@@ -5,14 +5,14 @@ use serde::Deserialize;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    ops::DerefMut,
+    ops::{DerefMut, Range},
     path::PathBuf,
     str::FromStr,
 };
 
 use crate::{
     card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
-    config::{CardEffects, CardEffectsKey, Config, SingleCardEffect},
+    config::{CardEffectsKey, CardPlayerAction, Config, SingOrMult, SingleCardEffect},
     error::{DmDescription, Error},
     mao_event::{
         card_event::CardEvent,
@@ -31,12 +31,15 @@ use super::{
     mao_action::MaoInteraction,
 };
 
-pub fn log(msg: &[u8]) -> anyhow::Result<()> {
+pub fn log<T>(msg: T) -> anyhow::Result<()>
+where
+    T: AsRef<str>,
+{
     let mut file = OpenOptions::new()
         .append(true)
         .create(true)
         .open("log.log")?;
-    file.write_all(msg)?;
+    file.write_all(msg.as_ref().as_bytes())?;
     file.write_all(&[10])?;
     Ok(())
 }
@@ -202,7 +205,9 @@ pub struct MaoCore {
     activated_rules: Vec<usize>,
     stacks: Vec<Stack>,
     players: Vec<Player>,
+
     player_turn: usize,
+    previous_player_turn: Option<usize>,
     /// the direction of the turn (-1 OR 1)
     turn: isize,
     /// all the events of a player that it did during its turn
@@ -211,36 +216,22 @@ pub struct MaoCore {
     automaton: Automaton,
     dealer: usize,
     config: Config,
+    possible_actions: Vec<String>,
 }
 
 // getters and setters
 impl MaoCore {
-    pub fn player_won(&self) -> Option<(usize, &Player)> {
-        self.players
-            .iter()
-            .enumerate()
-            .find(|(_, player)| player.get_cards().is_empty())
-    }
-    pub fn available_rules(&self) -> &[Rule] {
-        &self.available_rules
-    }
     pub fn activated_rules_indexes(&self) -> &[usize] {
         &self.activated_rules
     }
-    pub fn players_events(&self) -> &[MaoEvent] {
-        &self.player_events
-    }
-    pub fn dealer(&self) -> usize {
-        self.dealer
-    }
-    pub fn set_dealer(&mut self, dealer: usize) {
-        self.dealer = dealer;
+    pub fn automaton(&self) -> &Automaton {
+        &self.automaton
     }
     pub fn automaton_mut(&mut self) -> &mut Automaton {
         &mut self.automaton
     }
-    pub fn automaton(&self) -> &Automaton {
-        &self.automaton
+    pub fn available_rules(&self) -> &[Rule] {
+        &self.available_rules
     }
     pub fn common_penality_to_player(&mut self, player_index: usize) -> Result<(), Error> {
         let card = self.draw_multiple_cards_unchosen(1)?.pop().unwrap();
@@ -253,15 +244,93 @@ impl MaoCore {
             None => Err(Error::InvalidPlayerIndex { player_index, len }),
         }
     }
-
-    fn correct_player_action(&self, expected: &[PlayerAction], datas: &[PlayerAction]) -> bool {
+    fn correct_player_action<I>(&self, expected: &[PlayerAction], datas: I) -> bool
+    where
+        I: IntoIterator,
+        I::Item: Into<PlayerAction>,
+    {
+        let datas: Vec<PlayerAction> = datas.into_iter().map(|v| v.into()).collect();
         if expected.len() != datas.len() {
             return false;
         }
-        if expected.iter().zip(datas).any(|(ver, data)| ver != data) {
+        if expected.iter().zip(datas).any(|(ver, data)| ver != &data) {
             return false;
         }
         true
+    }
+    pub fn dealer(&self) -> usize {
+        self.dealer
+    }
+
+    pub fn on_say_action(&mut self, player_index: usize, message: String) -> anyhow::Result<()> {
+        let event = MaoEvent::SayEvent {
+            message,
+            player_index,
+        };
+        let res = self.on_event(&event)?;
+        let res = self.propagate_on_event_results_and_execute(player_index, &event, &res)?;
+        for int in &res {
+            match int {
+                WrongPlayerInteraction::Disallow(d) => {
+                    if let Some(pena) = d.penality {
+                        pena(self, player_index)?;
+                    } else {
+                        self.on_penality(player_index)?;
+                    }
+                }
+                WrongPlayerInteraction::ForgotSomething(_) => {
+                    return Err(Error::OnMaoInteraction(String::from(
+                        "Expected only Disallow found ForGotSomething from on_say_action",
+                    ))
+                    .into())
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn on_action_interaction(
+        &mut self,
+        player_index: usize,
+        interactions: &[MaoInteraction],
+    ) -> anyhow::Result<Vec<WrongPlayerInteraction>> {
+        let required = &[PlayerAction::SelectPlayer, PlayerAction::DoAction];
+        if !self.correct_player_action(required, interactions) {
+            return Ok(vec![]);
+        }
+
+        let MaoInteraction { data, .. } = interactions.last().unwrap();
+        let event = MaoEvent::PhysicalEvent {
+            physical_name: data
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("physical cannot be None"))?
+                .string_expecting()?
+                .to_owned(),
+            player_index,
+        };
+        let res = self.on_event(&event)?;
+        let res = self.propagate_on_event_results_and_execute(player_index, &event, &res)?;
+
+        for wrong_int in &res {
+            match wrong_int {
+                WrongPlayerInteraction::Disallow(d) => {
+                    if let Some(penality) = d.penality {
+                        penality(self, player_index)?
+                    } else {
+                        self.on_penality(player_index)?
+                    }
+                }
+                WrongPlayerInteraction::ForgotSomething(_) => {
+                    return Err(Error::OnMaoInteraction(
+                        "While handling external rules return of action, ForgotSomething returned"
+                            .to_string(),
+                    )
+                    .into())
+                }
+            }
+        }
+        // THERE
+        Ok(res)
     }
 
     fn draw_interaction(
@@ -270,25 +339,63 @@ impl MaoCore {
         interactions: &[MaoInteraction],
     ) -> anyhow::Result<Vec<WrongPlayerInteraction>> {
         let required = vec![PlayerAction::SelectDrawableStack];
-        if !mao.correct_player_action(
-            &required,
-            &interactions
-                .iter()
-                .map(|v| v.action.to_owned())
-                .collect::<Vec<PlayerAction>>(),
-        ) {
+        if !mao.correct_player_action(&required, interactions) {
             // TODO
             return Ok(Vec::new());
         }
+
+        let stack_index = match interactions[0].data.as_ref() {
+            Some(is) => Some(is.index_expecting()?),
+            None => None,
+        };
 
         Ok(mao.on_draw_card(CardEvent {
             played_card: Card::default(),
             card_index: 0,
             player_index,
-            stack_index: interactions[0].index,
+            stack_index,
         })?)
-        // mao.give_card_to_player_no_rules_check(mao.player_turn, interactions[0].index)
-        //     .unwrap();
+    }
+
+    fn generate_actions() -> Vec<Vec<NodeState>> {
+        vec![
+            vec![
+                NodeState::new(
+                    MaoInteraction::new(None, PlayerAction::SelectCard),
+                    None,
+                    None,
+                ),
+                NodeState::new(
+                    MaoInteraction::new(None, PlayerAction::SelectPlayableStack),
+                    Some(|player_index, mao, datas| {
+                        MaoCore::play_interaction(player_index, mao, datas)
+                    }),
+                    None,
+                ),
+            ],
+            vec![NodeState::new(
+                MaoInteraction::new(None, PlayerAction::SelectDrawableStack),
+                Some(|player_index, mao, datas| {
+                    MaoCore::draw_interaction(player_index, mao, datas)
+                }),
+                None,
+            )],
+            vec![
+                NodeState::new(
+                    MaoInteraction::new(None, PlayerAction::SelectPlayer),
+                    None,
+                    None,
+                ),
+                NodeState::new(
+                    MaoInteraction::new(None, PlayerAction::DoAction),
+                    // TODO HERE
+                    Some(|player_index, mao, datas| {
+                        MaoCore::on_action_interaction(mao, player_index, datas)
+                    }),
+                    None,
+                ),
+            ],
+        ]
     }
 
     /// this function loads the Mao structure from the `config` argument
@@ -327,36 +434,14 @@ impl MaoCore {
             libraries.push(Rule::try_from(rule.as_str())?);
         }
 
-        let actions = vec![
-            vec![
-                NodeState::new(
-                    MaoInteraction::new(None, PlayerAction::SelectCard),
-                    None,
-                    None,
-                ),
-                NodeState::new(
-                    MaoInteraction::new(None, PlayerAction::SelectPlayableStack),
-                    Some(|player_index, mao, datas| {
-                        MaoCore::play_interaction(player_index, mao, datas)
-                    }),
-                    None,
-                ),
-            ],
-            vec![NodeState::new(
-                MaoInteraction::new(None, PlayerAction::SelectDrawableStack),
-                Some(|player_index, mao, datas| {
-                    MaoCore::draw_interaction(player_index, mao, datas)
-                }),
-                None,
-            )],
-        ];
         let mut s = Self::new(
             libraries,
             Self::init_stacks(),
             Vec::new(),
-            Automaton::from_iter(actions),
+            Automaton::from_iter(Self::generate_actions()),
         );
         s.config = config.to_owned();
+        s.possible_actions = config.get_all_physical_actions().into_iter().collect();
         // verify that all rules are valid
         // TODO just not put rules that are not valid in the carbage
         if let Err(e) = s.rules_valid() {
@@ -374,23 +459,6 @@ impl MaoCore {
 
         Ok(s)
     }
-
-    pub fn init_stacks() -> Vec<Stack> {
-        let mut stacks = vec![Stack::new(
-            Self::generate_common_draw(),
-            false,
-            vec![StackType::Drawable],
-        )];
-        let first_card = stacks.first_mut().unwrap().draw_card().unwrap();
-        stacks.push(Stack::new(
-            vec![first_card],
-            true,
-            vec![StackType::Playable],
-        ));
-        stacks.push(Stack::new(vec![], true, vec![StackType::Discardable]));
-        stacks
-    }
-
     pub fn get_can_play_on_new_stack(&self) -> bool {
         self.can_play_on_new_stack
     }
@@ -407,24 +475,20 @@ impl MaoCore {
             .len())
     }
 
-    pub fn player_turn(&self) -> usize {
-        self.player_turn
-    }
-
-    pub fn players(&self) -> &[Player] {
-        &self.players
-    }
-
-    pub fn players_mut(&mut self) -> &mut Vec<Player> {
-        &mut self.players
-    }
-
-    pub fn stacks(&self) -> &[Stack] {
-        &self.stacks
-    }
-
-    pub fn stacks_mut(&mut self) -> &mut Vec<Stack> {
-        &mut self.stacks
+    pub fn init_stacks() -> Vec<Stack> {
+        let mut stacks = vec![Stack::new(
+            Self::generate_common_draw(),
+            false,
+            vec![StackType::Drawable],
+        )];
+        let first_card = stacks.first_mut().unwrap().draw_card().unwrap();
+        stacks.push(Stack::new(
+            vec![first_card],
+            true,
+            vec![StackType::Playable],
+        ));
+        stacks.push(Stack::new(vec![], true, vec![StackType::Discardable]));
+        stacks
     }
 
     pub fn new(
@@ -445,6 +509,8 @@ impl MaoCore {
             automaton,
             dealer: 0,
             config: Config::default(),
+            previous_player_turn: None,
+            possible_actions: Vec::new(),
         }
     }
 
@@ -471,16 +537,14 @@ impl MaoCore {
         &mut self,
         card_event: CardEvent,
     ) -> Result<Vec<WrongPlayerInteraction>, Error> {
+        // let turn_ends_wront_int = self.on_turn_ends()?;
         let event = MaoEvent::PlayedCardEvent(card_event.to_owned());
 
         // calling rules
         let res = self.on_event(&event)?;
 
-        let wrong_int = self.propagate_on_event_results_and_execute(
-            card_event.player_index,
-            &event,
-            &res.iter().collect::<Vec<&MaoEventResult>>(),
-        )?;
+        let mut wrong_int =
+            self.propagate_on_event_results_and_execute(card_event.player_index, &event, &res)?;
         if !wrong_int.is_empty() {
             for int in &wrong_int {
                 match int {
@@ -491,8 +555,11 @@ impl MaoCore {
                             self.on_penality(card_event.player_index)?;
                         }
                     }
+                    // this should never occur
+                    // TODO REMOVE
                     WrongPlayerInteraction::ForgotSomething(f) => {
                         if let Some(func) = f.penality {
+                            // TODO it is not always the player hand
                             func(self, card_event.player_index)?;
                         } else {
                             self.on_penality(card_event.player_index)?;
@@ -500,6 +567,8 @@ impl MaoCore {
                     }
                 }
             }
+            wrong_int.extend(self.on_turn_ends(true)?);
+            // wrong_int.extend(turn_ends_wront_int);
             return Ok(wrong_int);
         }
         // no interactions from external rules
@@ -509,9 +578,11 @@ impl MaoCore {
             &card_event.played_card,
             card_event.stack_index.and_then(|i| self.stacks().get(i)),
         );
+        // cannot play disallowed
         if !matches!(player_turn_res, PlayerTurnResult::CanPlay) {
+            let mut res_wrong_int = self.on_turn_ends(true)?;
             self.on_penality(card_event.player_index)?;
-            self.next_player(card_event.player_index, &event, true);
+            self.next_player(card_event.player_index, &event, true)?;
             let msg: String = match player_turn_res {
                 PlayerTurnResult::CanPlay => unreachable!("can play"),
                 PlayerTurnResult::WrongTurn => "It is not your turn".to_string(),
@@ -524,14 +595,16 @@ impl MaoCore {
                 ),
                 PlayerTurnResult::Other { desc } => desc.to_owned(),
             };
-            return Ok(vec![WrongPlayerInteraction::Disallow(Disallow::new(
+            res_wrong_int.push(WrongPlayerInteraction::Disallow(Disallow::new(
                 "Basic Rules".to_string(),
                 msg,
                 None,
-            ))]);
+            )));
+            return Ok(res_wrong_int);
         } else {
             // player can play
             // push card into played stack
+            let res_wront_int = self.on_turn_ends(false)?;
             if let Some(stack_index) = card_event.stack_index {
                 self.push_card_into_stack_target(
                     StackTarget::Stack(stack_index),
@@ -546,10 +619,208 @@ impl MaoCore {
                 StackTarget::Player(card_event.player_index),
                 card_event.card_index,
             )?;
-            self.next_player(card_event.player_index, &event, false);
+            self.next_player(card_event.player_index, &event, false)?;
+            return Ok(res_wront_int);
+        }
+    }
+
+    /// Finish the turn of player
+    /// This function should be only called from an action which has the ability to change to turn
+    /// And this function should be called BEFORE the player turn change
+    ///
+    /// this function will call [`Self::on_event`] with [`MaoEvent::EndPlayerTurn`]
+    /// and then clear player's actions
+    /// `wrong_interaction is required` to see if the previous player who played has
+    /// well played in case of a false, the move should not have been accorded by the game
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if .
+    fn on_turn_ends(
+        &mut self,
+        wrong_interaction: bool,
+    ) -> Result<Vec<WrongPlayerInteraction>, Error> {
+        // maybe add some check before like checking if the last inserted is a changeable turn
+        // maybe add this wront interaction ?
+        // punched has been triggered test other ones
+        let last_index = self.player_events.len().saturating_sub(1);
+        let _last_wrong_int = match wrong_interaction {
+            true => self.player_events.pop(),
+            false => None,
+        };
+        let mut range: Option<Range<usize>> = None;
+        let mut indexes: Vec<(usize, bool)> = Vec::new();
+        for i in (0..last_index).rev() {
+            let event = self.player_events.get(i).unwrap();
+            if event.can_change_turn() {
+                range = Some(Range {
+                    start: 0,
+                    end: i + 1,
+                });
+            } else {
+                let event_res = match event {
+                    MaoEvent::PlayedCardEvent(card_event)
+                    | MaoEvent::DiscardCardEvent(card_event)
+                    | MaoEvent::DrawedCardEvent(card_event) => Some(card_event.player_index),
+                    MaoEvent::SayEvent { player_index, .. }
+                    | MaoEvent::PhysicalEvent { player_index, .. } => Some(*player_index),
+                    MaoEvent::GiveCardEvent { .. } => None,
+                    _ => None,
+                };
+
+                // The current action of this player turn can be either related to the turn before him or its own turn
+                if event_res.is_none() || event_res.is_some_and(|v| v != self.player_turn) {
+                    indexes.push((i, true));
+                } else {
+                    indexes.push((i, false));
+                }
+            }
+        }
+        // events are in reversed order (newer...last_ones)
+        let mut datas: Vec<MaoEvent> = Vec::new();
+        for (index, remove) in indexes.drain(..) {
+            if remove {
+                datas.push(self.player_events.remove(index));
+            } else {
+                datas.push(self.player_events.get(index).unwrap().to_owned());
+            }
+        }
+        if let Some(range) = range {
+            datas.extend(self.player_events.drain(range).rev());
+        }
+        if datas.is_empty() {
+            return Ok(Vec::new());
+        }
+        let event = MaoEvent::EndPlayerTurn {
+            // events: self.player_events.extract_if(|_| false).collect(),
+            events: datas,
+        };
+        let res = self.on_event(&event)?;
+        let wrong_int =
+            self.propagate_on_event_results_and_execute(self.player_turn, &event, &res)?;
+        if !wrong_int.is_empty() {
+            for int in &wrong_int {
+                match int {
+                    WrongPlayerInteraction::Disallow(disallow) => {
+                        if let Some(func) = disallow.penality {
+                            func(self, self.player_turn)?;
+                        } else {
+                            self.on_penality(self.player_turn)?;
+                        }
+                    }
+                    WrongPlayerInteraction::ForgotSomething(f) => {
+                        if let Some(func) = f.penality {
+                            func(self, self.player_turn)?;
+                        } else {
+                            self.on_penality(self.player_turn)?;
+                        }
+                    }
+                }
+            }
+            return Ok(wrong_int);
+        }
+        let player_pseudo = self
+            .previous_player_turn
+            .and_then(|index| self.players.get(index))
+            .map(|player| player.get_pseudo());
+        if player_pseudo.is_none() {
+            return Ok(vec![]);
+        }
+        let player_pseudo = player_pseudo.unwrap();
+
+        let mut wrong_int: Vec<WrongPlayerInteraction> = Vec::new();
+
+        match event {
+            MaoEvent::EndPlayerTurn { events } => {
+                let say_events: Vec<(&str, usize)> = events
+                    .iter()
+                    .flat_map(|event| match event {
+                        MaoEvent::SayEvent {
+                            message,
+                            player_index,
+                        } => Some((message.as_str(), *player_index)),
+                        _ => None,
+                    })
+                    .collect();
+                // check in all events played card type
+                for previous_event in events.iter() {
+                    if let MaoEvent::PlayedCardEvent(card_event) = previous_event {
+                        // get all card's effects
+                        let card_effects = self.get_card_effects(&card_event.played_card);
+                        // check if all card's effects are been done
+                        for effect in card_effects.iter() {
+                            if let SingleCardEffect::CardPlayerAction(card_action) = effect {
+                                match card_action {
+                                    CardPlayerAction::Say(words_to_say) => {
+                                        for word_to_say in words_to_say {
+                                            match word_to_say {
+                                                SingOrMult::Single(word) => {
+                                                    // check if the required word as been said earlier
+                                                    if !say_events.iter().any(
+                                                        |(message, player_index)| {
+                                                            *player_index == card_event.player_index
+                                                                && message.contains(word)
+                                                        },
+                                                    ) {
+                                                        wrong_int.push(
+                                                            WrongPlayerInteraction::forgot_saying_basic(None, player_pseudo));
+                                                        break;
+                                                    }
+                                                }
+                                                // check if all the words have been said earlier
+                                                SingOrMult::Multiple(words) => {
+                                                    if !say_events.iter().any(
+                                                        |(message, player_index)| {
+                                                            *player_index == card_event.player_index
+                                                                && words.iter().any(|word| {
+                                                                    message.contains(word)
+                                                                })
+                                                        },
+                                                    ) {
+                                                        wrong_int.push(
+                                                            WrongPlayerInteraction::forgot_saying_basic(None, player_pseudo));
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    CardPlayerAction::Physical(physical_name) => {
+                                        if !events.contains(&MaoEvent::PhysicalEvent {
+                                            physical_name: physical_name.to_owned(),
+                                            player_index: card_event.player_index,
+                                        }) {
+                                            wrong_int.push(
+                                                WrongPlayerInteraction::forgot_doing_basic(
+                                                    None,
+                                                    player_pseudo,
+                                                ),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => unreachable!(),
         }
 
-        Ok(Vec::new())
+        for int in wrong_int.iter() {
+            match int {
+                WrongPlayerInteraction::ForgotSomething(f) => {
+                    if let Some(func) = f.penality {
+                        func(self, self.previous_player_turn.unwrap())?;
+                    } else {
+                        self.on_penality(self.previous_player_turn.unwrap())?;
+                    }
+                }
+                // TODO change this return type
+                _ => unreachable!(),
+            }
+        }
+        Ok(wrong_int)
     }
 
     fn play_interaction(
@@ -558,13 +829,7 @@ impl MaoCore {
         interactions: &[MaoInteraction],
     ) -> anyhow::Result<Vec<WrongPlayerInteraction>> {
         let expected = vec![PlayerAction::SelectCard, PlayerAction::SelectPlayableStack];
-        if !mao.correct_player_action(
-            &expected,
-            &interactions
-                .iter()
-                .map(|v| v.action.to_owned())
-                .collect::<Vec<PlayerAction>>(),
-        ) {
+        if !mao.correct_player_action(&expected, interactions) {
             // TODO
             return Err(Error::InvalidMaoInteraction {
                 expected,
@@ -572,13 +837,15 @@ impl MaoCore {
             }
             .into());
         }
-        if interactions[0].index.is_none() {
-            return Err(Error::InvalidCardIndex {
+        let card_index = interactions[0]
+            .data
+            .as_ref()
+            .ok_or_else(|| Error::InvalidCardIndex {
                 card_index: usize::MAX,
                 len: 0,
-            }
-            .into());
-        }
+            })?
+            .index_expecting()?;
+
         let player = mao
             .players
             .get(player_index)
@@ -589,34 +856,75 @@ impl MaoCore {
             .unwrap(); // TODO remove
         let card = player
             .get_cards()
-            .get(interactions[0].index.unwrap())
+            .get(card_index)
             .ok_or(Error::InvalidCardIndex {
-                card_index: interactions[0].index.unwrap(),
+                card_index,
                 len: player.get_cards().len(),
             })
             .unwrap()
             .to_owned(); // TODO
-        if interactions[1]
-            .index
-            .is_some_and(|index| mao.stacks.get(index).is_none())
-        {
+
+        let stack_index = match interactions[1].data.as_ref() {
+            Some(is) => Some(is.index_expecting()?),
+            None => None,
+        };
+        if stack_index.is_some_and(|index| mao.stacks.get(index).is_none()) {
             return Err(Error::InvalidStackIndex {
-                stack_index: interactions[1].index.unwrap(),
+                stack_index: stack_index.unwrap(),
                 len: mao.stacks.len(),
             }
             .into()); // TODO
         }
         Ok(mao.on_play_card(CardEvent {
-            card_index: interactions[0].index.unwrap(),
+            card_index,
             played_card: card,
             player_index,
-            stack_index: interactions[1].index,
+            stack_index,
         })?)
         // mao.playsc
     }
 
+    pub fn player_turn(&self) -> usize {
+        self.player_turn
+    }
+
+    pub fn player_won(&self) -> Option<(usize, &Player)> {
+        self.players
+            .iter()
+            .enumerate()
+            .find(|(_, player)| player.get_cards().is_empty())
+    }
+
+    pub fn players(&self) -> &[Player] {
+        &self.players
+    }
+
+    pub fn players_events(&self) -> &[MaoEvent] {
+        &self.player_events
+    }
+
+    pub fn players_mut(&mut self) -> &mut Vec<Player> {
+        &mut self.players
+    }
+
+    pub fn possible_actions(&self) -> &[String] {
+        &self.possible_actions
+    }
+
     pub fn set_can_play_on_new_stack(&mut self, can_play_on_new_stack: bool) {
         self.can_play_on_new_stack = can_play_on_new_stack;
+    }
+
+    pub fn set_dealer(&mut self, dealer: usize) {
+        self.dealer = dealer;
+    }
+
+    pub fn stacks(&self) -> &[Stack] {
+        &self.stacks
+    }
+
+    pub fn stacks_mut(&mut self) -> &mut Vec<Stack> {
+        &mut self.stacks
     }
 }
 
@@ -1016,6 +1324,15 @@ impl MaoCore {
             players.push(self.init_player(pseudo.to_owned(), nb_card)?);
         }
         self.players = players;
+        self.players
+            .last_mut()
+            .unwrap()
+            .get_cards_mut()
+            .push(Card::new(
+                CardValue::Number(9),
+                CardType::Common(CommonCardType::Spade),
+                None,
+            ));
         Ok(())
     }
 
@@ -1053,8 +1370,43 @@ impl MaoCore {
         ))
     }
 
+    fn get_card_effect(&self, key: CardEffectsKey) -> Vec<&SingleCardEffect> {
+        if let Some(v) = self.config.cards_effects.get(&key) {
+            match v {
+                SingOrMult::Single(s) => return vec![s],
+                SingOrMult::Multiple(v) => return v.iter().collect(),
+            }
+        }
+        vec![]
+    }
+
+    /// Returns all the [`CardEffects`] that a [`Card`] has on
+    fn get_card_effects(&self, card: &Card) -> Vec<&SingleCardEffect> {
+        let mut effects = vec![];
+        // Searching effects with only its value
+        effects.extend(
+            self.get_card_effect(CardEffectsKey::new(None, Some(card.get_value().to_owned()))),
+        );
+        // Searching effects with only its type
+        effects.extend(
+            self.get_card_effect(CardEffectsKey::new(Some(card.get_sign().to_owned()), None)),
+        );
+        // Searching effects with the card itself
+        effects.extend(self.get_card_effect(CardEffectsKey::new(
+            Some(card.get_sign().to_owned()),
+            Some(card.get_value().to_owned()),
+        )));
+
+        effects
+    }
+
     /// Handle turn change when a [`MaoEvent`] occurs, player index is used to check if it is the player turn
-    pub fn next_player(&mut self, player_index: usize, event: &MaoEvent, took_penality: bool) {
+    pub fn next_player(
+        &mut self,
+        player_index: usize,
+        event: &MaoEvent,
+        took_penality: bool,
+    ) -> Result<(), Error> {
         match event {
             MaoEvent::PlayedCardEvent(card_event) => {
                 // no need to remove / add cards handled before
@@ -1062,44 +1414,35 @@ impl MaoCore {
                 if player_index == self.player_turn {
                     if took_penality {
                         self.update_turn(PlayerTurnChange::default());
-                        return;
+                        return Ok(());
                     }
-                    let changes = match self.config.cards_effects.get(&CardEffectsKey::new(
-                        None,
-                        card_event.played_card.get_value().to_owned(),
-                    )) {
-                        Some(changes) => changes.to_owned(),
-                        None => self
-                            .config
-                            .cards_effects
-                            .iter()
-                            .find_map(|(card_key, card_effect)| {
-                                if card_key.c_type.is_none()
-                                    && &card_key.value == card_event.played_card.get_value()
-                                {
-                                    Some(card_effect.to_owned())
-                                } else {
-                                    None
-                                }
-                            })
-                            .unwrap_or(CardEffects::SingleEffect(
-                                SingleCardEffect::PlayerTurnChange(PlayerTurnChange::default()),
-                            )),
-                    };
-                    let changes = match changes {
-                        crate::config::CardEffects::SingleEffect(c) => match c {
-                            crate::config::SingleCardEffect::PlayerTurnChange(e) => e,
-                            crate::config::SingleCardEffect::CardPlayerAction(_) => todo!(),
-                        },
-                        crate::config::CardEffects::MultipleEffects(_) => todo!(),
-                    };
-                    self.update_turn(changes);
+                    self.previous_player_turn = Some(self.player_turn);
+                    let changes: Vec<&PlayerTurnChange> = self
+                        .get_card_effects(&card_event.played_card)
+                        .iter()
+                        .filter_map(|card_effect| match card_effect {
+                            SingleCardEffect::PlayerTurnChange(change) => Some(change),
+                            SingleCardEffect::CardPlayerAction(_) => None,
+                        })
+                        .collect();
+                    if changes.is_empty() {
+                        self.update_turn(PlayerTurnChange::default());
+                    } else {
+                        let changes: Vec<PlayerTurnChange> =
+                            changes.iter().map(|&v| v.to_owned()).collect();
+                        for change in changes {
+                            self.update_turn(change);
+                        }
+                    }
+                    return Ok(());
                 }
             }
             MaoEvent::DiscardCardEvent(_) => todo!(),
             MaoEvent::DrawedCardEvent(_) => {
                 if player_index == self.player_turn {
                     self.update_turn(PlayerTurnChange::default());
+                    self.previous_player_turn = Some(self.player_turn);
+                    return Ok(());
                 }
             }
             MaoEvent::GiveCardEvent { .. } => (),
@@ -1108,7 +1451,10 @@ impl MaoCore {
             MaoEvent::EndPlayerTurn { .. } => (),
             MaoEvent::VerifyEvent => unreachable!("verify event"),
             MaoEvent::PlayerPenality { .. } => (),
+            MaoEvent::SayEvent { .. } => todo!(),
+            MaoEvent::PhysicalEvent { .. } => todo!(),
         }
+        Ok(())
     }
 
     /// Call [`Rule::on_event`] on each activated rules
@@ -1122,7 +1468,9 @@ impl MaoCore {
     /// + there is not `on_event` functions inside the rule (should never occur)
     /// + the `on_event` function from the rule fails
     pub fn on_event(&mut self, event: &MaoEvent) -> Result<Vec<MaoEventResult>, Error> {
-        self.player_events.push(event.to_owned());
+        if event.is_recordable() {
+            self.player_events.push(event.to_owned());
+        }
         let mut results = Vec::with_capacity(self.activated_rules.len());
         for i in 0..self.activated_rules.len() {
             results.push(self
@@ -1141,12 +1489,17 @@ impl MaoCore {
     /// # Errors
     ///
     /// This function will return an error if .
-    pub fn propagate_on_event_results_and_execute(
+    pub fn propagate_on_event_results_and_execute<'a, I>(
         &mut self,
         player_index: usize,
         previous_event: &MaoEvent,
-        event_results: &[&MaoEventResult],
-    ) -> Result<Vec<WrongPlayerInteraction>, Error> {
+        event_results_iter: I,
+    ) -> Result<Vec<WrongPlayerInteraction>, Error>
+    where
+        I: IntoIterator<Item = &'a MaoEventResult>,
+    {
+        let event_results: Vec<&MaoEventResult> =
+            event_results_iter.into_iter().map(|v| v).collect();
         if event_results
             .iter()
             .any(|r| !matches!(r.res_type, MaoEventResultType::Ignored,))
@@ -1154,7 +1507,7 @@ impl MaoCore {
             let mut wrong_interactions: Vec<WrongPlayerInteraction> = Vec::new();
             // one rule did not ignored it
             let mut not_ignored: Vec<&MaoEventResult> = Vec::new();
-            for mao_res in event_results {
+            for mao_res in &event_results {
                 match &mao_res.res_type {
                     MaoEventResultType::Disallow(disallow) => {
                         wrong_interactions
@@ -1210,7 +1563,7 @@ impl MaoCore {
                     bef(self, player_index)?;
                 }
                 if !overrided {
-                    self.next_player(player_index, previous_event, false);
+                    self.next_player(player_index, previous_event, false)?;
                 }
                 for aft in &after {
                     aft(self, player_index)?;
@@ -1219,23 +1572,6 @@ impl MaoCore {
             return Ok(wrong_interactions);
         }
         Ok(Vec::new())
-    }
-
-    /// Finish the turn of player
-    ///
-    /// this function will call [`Self::on_event`] with [`MaoEvent::EndPlayerTurn`]
-    /// and then clear player's actions
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if .
-    pub fn player_finish_turn(&mut self) -> Result<(), Error> {
-        let event = MaoEvent::EndPlayerTurn {
-            events: self.player_events.to_owned(),
-        };
-        self.on_event(&event)?;
-        self.player_events.clear();
-        Ok(())
     }
 
     /// Add a new [`Card`] into the `target` according to [`StackTarget`]
@@ -1462,8 +1798,15 @@ impl MaoCore {
         card_event.played_card = card.to_owned();
         card_event.stack_index = Some(stack_index);
         let event = MaoEvent::DrawedCardEvent(card_event.to_owned());
-        // call rules
+        // call rules back propagate will be called later on
         let res = self.on_event(&event)?;
+
+        let turn_ends_wrong_int = if card_event.player_index == self.player_turn {
+            self.on_turn_ends(true)?
+        } else {
+            vec![]
+        };
+
         // give the card to the player if all rules have ignored it
         if res
             .iter()
@@ -1484,50 +1827,27 @@ impl MaoCore {
             self.stacks.get_mut(stack_index).unwrap().push(card);
             for result in &res {
                 if !matches!(&result.res_type, MaoEventResultType::Ignored) {
-                    // MaoEventResultType::Disallow(d) => {
-                    // d.print_warning(Arc::clone(&ui))?;
-                    // }
                     values.push(result);
                 }
             }
             // TODO
-            let disallows = self.propagate_on_event_results_and_execute(
+            let mut disallows = self.propagate_on_event_results_and_execute(
                 card_event.player_index,
                 &event,
-                &values,
+                values,
             )?;
             if !disallows.is_empty() {
+                disallows.extend(turn_ends_wrong_int);
                 return Ok(disallows);
             }
-            // if !values.is_empty() {
-            //     return Ok(());
-            // }
         }
 
-        Ok(Vec::new())
+        Ok(turn_ends_wrong_int)
     }
 }
 
 // players' actions
 impl MaoCore {
-    // pub fn on_mao_event(&mut self, mao_event: MaoEvent) -> Result<Vec<Disallow>, Error> {
-    //     match mao_event {
-    //         MaoEvent::PlayedCardEvent(e) => self.on_play_card(e),
-    //         MaoEvent::DiscardCardEvent(_) => todo!(),
-    //         MaoEvent::DrawedCardEvent(e) => self.on_draw_card(e),
-    //         MaoEvent::GiveCardEvent {
-    //             card,
-    //             from_player_index,
-    //             target,
-    //         } => todo!(),
-    //         MaoEvent::StackPropertyRunsOut { empty_stack_index } => todo!(),
-    //         MaoEvent::GameStart => todo!(),
-    //         MaoEvent::EndPlayerTurn { events } => todo!(),
-    //         MaoEvent::VerifyEvent => todo!(),
-    //         MaoEvent::PlayerPenality { player_target } => todo!(),
-    //     }
-    // }
-
     pub fn generate_common_draw() -> Vec<Card> {
         let types = &[
             CommonCardType::Spade,

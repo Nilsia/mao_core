@@ -13,7 +13,7 @@ pub enum StackTarget {
 }
 
 /// A event which an occur when playing the mao board game
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MaoEvent {
     /// Released when a card is played
     PlayedCardEvent(CardEvent),
@@ -37,9 +37,34 @@ pub enum MaoEvent {
     PlayerPenality { player_target: usize },
     /// Released when verifying the validity of the rules (only called at inialization)
     VerifyEvent,
+    /// Released when a player says something
+    SayEvent {
+        message: String,
+        player_index: usize,
+    },
+    /// Released when a player does a physical interaction
+    PhysicalEvent {
+        physical_name: String,
+        player_index: usize,
+    },
 }
 
 impl MaoEvent {
+    pub fn is_recordable(&self) -> bool {
+        !matches!(
+            self,
+            MaoEvent::GameStart
+                | MaoEvent::VerifyEvent
+                | MaoEvent::StackPropertyRunsOut { .. }
+                | MaoEvent::EndPlayerTurn { .. }
+                | MaoEvent::PlayerPenality { .. }
+        )
+    }
+
+    pub fn can_change_turn(&self) -> bool {
+        matches!(self, Self::PlayedCardEvent(_) | Self::DrawedCardEvent(_))
+    }
+
     /// Returns the concerned [`Card`] of the event if the event is about a card event
     pub fn get_card(&self) -> Option<&Card> {
         match self {
@@ -52,6 +77,8 @@ impl MaoEvent {
             MaoEvent::EndPlayerTurn { .. } => None,
             MaoEvent::VerifyEvent => unreachable!("verify event"),
             MaoEvent::PlayerPenality { .. } => None,
+            MaoEvent::SayEvent { .. } => None,
+            MaoEvent::PhysicalEvent { .. } => None,
         }
     }
 }
