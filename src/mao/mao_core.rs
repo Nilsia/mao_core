@@ -1011,7 +1011,7 @@ impl MaoCore {
                 }
 
                 if let Some(actions) = rule.get_actions() {
-                    self.automaton.extend(actions);
+                    self.automaton.extend(actions.to_owned());
                 }
                 self.activated_rules.push(index);
                 Ok(())

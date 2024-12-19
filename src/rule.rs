@@ -12,24 +12,31 @@ use crate::{
 type OnEventFunctionSignature =
     fn(event: &MaoEvent, mao: &mut MaoCore) -> anyhow::Result<MaoEventResult>;
 
+#[derive(Default)]
+pub struct RuleData {
+    pub name: String,
+    pub author: Option<String>,
+    pub description: Option<String>,
+    pub actions: Option<Vec<Vec<NodeState>>>,
+}
+
 #[derive(WrapperApi)]
 pub struct Library {
     on_event: fn(event: &MaoEvent, mao: &mut MaoCore) -> anyhow::Result<MaoEventResult>,
     get_version: fn() -> String,
-    get_actions: Option<fn() -> Vec<Vec<NodeState>>>,
-    name: fn() -> &'static str,
-    description: Option<fn() -> &'static str>,
-    author: fn() -> Option<&'static str>,
+    rule_data: fn() -> RuleData,
 }
 
 pub struct Rule {
     lib: Container<Library>,
     light_filename: String,
     path: PathBuf,
+    data: RuleData,
 }
 
 impl Rule {
     pub fn new(lib: Container<Library>, name: String) -> Self {
+        let data = lib.rule_data();
         Self {
             lib,
             path: PathBuf::from(&name),
@@ -44,6 +51,7 @@ impl Rule {
                 .first()
                 .unwrap()
                 .to_owned(),
+            data,
         }
     }
 
@@ -55,8 +63,8 @@ impl Rule {
         (self.lib.get_version)()
     }
 
-    pub(crate) fn get_actions(&self) -> Option<Vec<Vec<NodeState>>> {
-        self.lib.get_actions()
+    pub(crate) fn get_actions(&self) -> Option<&[Vec<NodeState>]> {
+        self.data.actions.as_ref().map(|v| &**v)
     }
 
     pub fn is_valid_rule(&self, mao: &mut MaoCore) -> Result<(), Error> {
@@ -73,16 +81,16 @@ impl Rule {
         &self.light_filename
     }
 
-    pub fn description(&self) -> Option<&'static str> {
-        self.lib.description()
+    pub fn description(&self) -> Option<&str> {
+        self.data.description.as_deref()
     }
 
-    pub fn name(&self) -> &'static str {
-        self.lib.name()
+    pub fn name(&self) -> &str {
+        &self.data.name
     }
 
-    pub fn author(&self) -> Option<&'static str> {
-        self.lib.author()
+    pub fn author(&self) -> Option<&str> {
+        self.data.author.as_deref()
     }
 }
 
