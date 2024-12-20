@@ -37,10 +37,10 @@ impl Config {
         };
         for effects in self.cards_effects.values() {
             match effects {
-                SingOrMult::Single(s) => match_single_card_effect(s),
+                SingOrMult::Single(s) => match_single_card_effect(&s.0),
                 SingOrMult::Multiple(v_s) => {
                     for s in v_s {
-                        match_single_card_effect(s)
+                        match_single_card_effect(&s.0)
                     }
                 }
             }
@@ -62,10 +62,10 @@ impl Config {
     fn clear(&mut self) {
         for value in self.cards_effects.values_mut() {
             match value {
-                CardEffects::Single(single) => single.clear(),
+                CardEffects::Single(single) => single.0.clear(),
                 CardEffects::Multiple(v) => {
                     for single_card_effect in v {
-                        single_card_effect.clear()
+                        single_card_effect.0.clear()
                     }
                 }
             }
@@ -259,7 +259,13 @@ impl FromStr for SingleCardEffect {
     }
 }
 
-pub type CardEffects = SingOrMult<SingleCardEffect>;
+#[derive(Debug, Clone)]
+pub struct RuleCardsEffects {
+    pub rule_name: String,
+    pub error_message: Option<String>,
+}
+
+pub type CardEffects = SingOrMult<(SingleCardEffect, Option<RuleCardsEffects>)>;
 
 struct CardEffectsVisitor;
 
@@ -283,9 +289,11 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
     where
         E: serde::de::Error,
     {
-        v.parse::<SingleCardEffect>()
+        let a = v
+            .parse::<SingleCardEffect>()
             .map_err(serde::de::Error::custom)
-            .map(CardEffects::Single)
+            .map(|v| (CardEffects::Single((v, None))));
+        a
     }
 
     fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
@@ -293,19 +301,19 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
         A: serde::de::MapAccess<'de>,
     {
         CardPlayerAction::deserialize(serde::de::value::MapAccessDeserializer::new(map))
-            .map(|v| CardEffects::Single(SingleCardEffect::CardPlayerAction(v)))
+            .map(|v| CardEffects::Single((SingleCardEffect::CardPlayerAction(v), None)))
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
-        let mut data: Vec<SingleCardEffect> = match seq.size_hint() {
+        let mut data: Vec<(SingleCardEffect, Option<RuleCardsEffects>)> = match seq.size_hint() {
             Some(s) => Vec::with_capacity(s),
             None => vec![],
         };
         while let Some(value) = seq.next_element::<SingleCardEffect>()? {
-            data.push(value);
+            data.push((value, None));
         }
         Ok(CardEffects::Multiple(data))
     }

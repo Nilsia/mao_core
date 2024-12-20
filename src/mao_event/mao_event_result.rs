@@ -120,36 +120,42 @@ impl WrongPlayerInteraction {
         msg: Option<String>,
         rule: Option<String>,
         penality: Option<PenalityCallbackFunction>,
-        player_pseudo: &str,
+        player_pseudo: String,
     ) -> Self {
         Self::ForgotSomething(ForgotSomething {
             forgot_type: CardPlayerActionType::Do,
             rule,
             penality,
             msg,
-            player_pseudo: player_pseudo.to_owned(),
+            player_pseudo,
         })
     }
     pub fn forgot_saying(
         msg: Option<String>,
         rule: Option<String>,
         penality: Option<PenalityCallbackFunction>,
-        player_pseudo: &str,
+        player_pseudo: String,
     ) -> Self {
         Self::ForgotSomething(ForgotSomething {
             forgot_type: CardPlayerActionType::Say,
             rule,
             penality,
             msg,
-            player_pseudo: player_pseudo.to_owned(),
+            player_pseudo,
         })
     }
 
     pub(crate) fn forgot_saying_basic(msg: Option<String>, player_pseudo: &str) -> Self {
-        Self::forgot_saying(msg, None, None, player_pseudo)
+        Self::forgot_saying(msg, None, None, player_pseudo.to_owned())
     }
     pub(crate) fn forgot_doing_basic(msg: Option<String>, player_pseudo: &str) -> Self {
-        Self::forgot_doing(msg, None, None, player_pseudo)
+        Self::forgot_doing(msg, None, None, player_pseudo.to_owned())
+    }
+    pub(crate) fn forgot_saying_ruled(rule: &str, player_pseudo: &str) -> Self {
+        Self::forgot_saying(None, Some(rule.to_owned()), None, player_pseudo.to_owned())
+    }
+    pub(crate) fn forgot_doing_ruled(rule: &str, player_pseudo: &str) -> Self {
+        Self::forgot_doing(None, Some(rule.to_owned()), None, player_pseudo.to_owned())
     }
 }
 
