@@ -11,8 +11,19 @@ pub const VERSION: &str = "1.0";
 
 #[cfg(test)]
 mod test {
+
     use super::mao::automaton::*;
-    use crate::mao::mao_action::MaoInteraction;
+    use crate::{
+        card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType},
+        config::{
+            CardEffects, CardEffectsInner, CardEffectsKey, CardEffectsStruct, CardPlayerAction,
+            RuleCardsEffect, SingOrMult, SingleCardEffect,
+        },
+        mao::{
+            mao_action::MaoInteraction,
+            mao_core::{PlayerTurnChange, PlayerTurnUpdater},
+        },
+    };
 
     fn generate_path() -> Vec<Vec<NodeState>> {
         vec![
@@ -99,5 +110,66 @@ mod test {
         let inv_auto = Automaton::from_iter(inverted_actions);
 
         assert_eq!(init_auto, inv_auto);
+    }
+
+    #[test]
+    fn card_effect_struct_deserialisation() -> anyhow::Result<()> {
+        let data = r#"
+        1_diamond = [
+            { effect = {type = "say", values = ["diamond", ["1", "as", "one"]]}, rule_info = {rule_name = "Rulename1"} },
+            {effects = {type = "physical", values = "punch"}},
+            {effect = "up_up_2"}
+        ]
+        8 = {effect = "ro_up_2"}
+        5 = {effect = {type = "physical", values = "cry"}}"#;
+        let b: CardEffectsStruct = toml::from_str(data)?;
+        let mut c = CardEffectsStruct::default();
+        c.insert(
+            CardEffectsKey::new(
+                Some(CardType::Common(CommonCardType::Diamond)),
+                Some(CardValue::Number(1)),
+            ),
+            CardEffects::multiple(vec![
+                CardEffectsInner::new(
+                    SingleCardEffect::CardPlayerAction(CardPlayerAction::Say(vec![
+                        SingOrMult::Single("diamond".to_owned()),
+                        SingOrMult::Multiple(
+                            vec!["1", "as", "one"]
+                                .iter()
+                                .map(|&s| String::from(s))
+                                .collect(),
+                        ),
+                    ])),
+                    RuleCardsEffect {
+                        rule_name: "Rulename1".to_owned(),
+                        error_message: None,
+                    },
+                ),
+                CardEffectsInner::only(SingleCardEffect::CardPlayerAction(
+                    CardPlayerAction::Physical("punch".to_owned()),
+                )),
+                CardEffectsInner::only(SingleCardEffect::PlayerTurnChange(
+                    PlayerTurnChange::Update(PlayerTurnUpdater::Update(2)),
+                )),
+            ]),
+        );
+        c.insert(
+            CardEffectsKey::new(None, Some(CardValue::Number(8))),
+            CardEffects::single(CardEffectsInner::only(SingleCardEffect::PlayerTurnChange(
+                PlayerTurnChange::Rotate(PlayerTurnUpdater::Update(2)),
+            ))),
+        );
+        c.insert(
+            CardEffectsKey::new(None, Some(CardValue::Number(5))),
+            CardEffects {
+                effects: SingOrMult::Single(CardEffectsInner::only(
+                    SingleCardEffect::CardPlayerAction(CardPlayerAction::Physical(
+                        "cry".to_owned(),
+                    )),
+                )),
+            },
+        );
+        assert_eq!(b, c);
+        Ok(())
     }
 }

@@ -13,7 +13,8 @@ use std::{
 use crate::{
     card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
     config::{
-        CardEffectsKey, CardPlayerAction, Config, RuleCardsEffects, SingOrMult, SingleCardEffect,
+        CardEffects, CardEffectsInner, CardEffectsKey, CardPlayerAction, Config, RuleCardsEffect,
+        SingOrMult, SingleCardEffect,
     },
     error::{DmDescription, Error},
     mao_event::{
@@ -46,7 +47,7 @@ where
     Ok(())
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlayerTurnUpdater {
     Set(usize),
     Update(isize),
@@ -78,7 +79,7 @@ impl Default for PlayerTurnUpdater {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlayerTurnChange {
     Update(PlayerTurnUpdater),
     Rotate(PlayerTurnUpdater),
@@ -429,12 +430,16 @@ impl MaoCore {
                 for key in effects.keys() {
                     let effect = effects.get(key).unwrap();
                     if self.config.cards_effects.contains_key(&key) {
-                        match (effect, self.config.cards_effects.get_mut(key).unwrap()) {
+                        match (
+                            &effect.effects,
+                            &mut self.config.cards_effects.get_mut(key).unwrap().effects,
+                        ) {
                             (SingOrMult::Single(r), SingOrMult::Single(c)) => {
                                 let data = vec![r.to_owned(), c.to_owned()];
-                                self.config
-                                    .cards_effects
-                                    .insert(key.to_owned(), SingOrMult::Multiple(data));
+                                self.config.cards_effects.insert(
+                                    key.to_owned(),
+                                    CardEffects::new(SingOrMult::Multiple(data)),
+                                );
                             }
                             (SingOrMult::Single(r), SingOrMult::Multiple(c)) => {
                                 c.push(r.to_owned())
@@ -442,12 +447,13 @@ impl MaoCore {
                             (SingOrMult::Multiple(r), SingOrMult::Single(c)) => {
                                 let mut data = r.to_owned();
                                 data.push(c.to_owned());
-                                self.config
-                                    .cards_effects
-                                    .insert(key.to_owned(), SingOrMult::Multiple(data));
+                                self.config.cards_effects.insert(
+                                    key.to_owned(),
+                                    CardEffects::new(SingOrMult::Multiple(data)),
+                                );
                             }
                             (SingOrMult::Multiple(r), SingOrMult::Multiple(c)) => {
-                                c.extend_from_slice(r)
+                                c.extend_from_slice(&r)
                             }
                         }
                     } else {
@@ -789,7 +795,10 @@ impl MaoCore {
                         let card_effects = self.get_card_effects(&card_event.played_card);
                         // check if all card's effects are been done
                         for effect in card_effects.iter() {
-                            if let (SingleCardEffect::CardPlayerAction(card_action), rule) = effect
+                            if let CardEffectsInner {
+                                effect: SingleCardEffect::CardPlayerAction(card_action),
+                                rule_effect: rule,
+                            } = effect
                             {
                                 match card_action {
                                     CardPlayerAction::Say(words_to_say) => {
@@ -1422,21 +1431,22 @@ impl MaoCore {
         ))
     }
 
-    fn get_card_effect(
-        &self,
-        key: CardEffectsKey,
-    ) -> Vec<&(SingleCardEffect, Option<RuleCardsEffects>)> {
+    fn get_card_effect(&self, key: CardEffectsKey) -> Vec<&CardEffectsInner> {
         if let Some(v) = self.config.cards_effects.get(&key) {
             match v {
-                SingOrMult::Single(s) => return vec![s],
-                SingOrMult::Multiple(v) => return v.iter().collect(),
+                CardEffects {
+                    effects: SingOrMult::Single(s),
+                } => return vec![s],
+                CardEffects {
+                    effects: SingOrMult::Multiple(v),
+                } => return v.iter().collect(),
             }
         }
         vec![]
     }
 
     /// Returns all the [`CardEffects`] that a [`Card`] has on
-    fn get_card_effects(&self, card: &Card) -> Vec<&(SingleCardEffect, Option<RuleCardsEffects>)> {
+    fn get_card_effects(&self, card: &Card) -> Vec<&CardEffectsInner> {
         let mut effects = vec![];
         // Searching effects with only its value
         effects.extend(
@@ -1475,7 +1485,7 @@ impl MaoCore {
                     let changes: Vec<&PlayerTurnChange> = self
                         .get_card_effects(&card_event.played_card)
                         .iter()
-                        .filter_map(|card_effect| match &card_effect.0 {
+                        .filter_map(|card_effect| match &card_effect.effect {
                             SingleCardEffect::PlayerTurnChange(change) => Some(change),
                             SingleCardEffect::CardPlayerAction(_) => None,
                         })

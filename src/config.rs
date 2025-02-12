@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt,
+    ops::{Deref, DerefMut},
     path::PathBuf,
     str::FromStr,
 };
@@ -16,11 +17,68 @@ use serde::{
     Deserialize, Deserializer,
 };
 
+// pub trait TomlExtention<'de, K, V>
+// where
+//     K: Deserialize<'de>,
+//     V: Deserialize<'de>,
+// {
+//     fn key_value(input: &str) -> (K, V);
+//     fn from_str(input: &str) -> Self
+//     where
+//         Self: Sized,
+//     {
+//         Self::from_iterator(input.lines())
+//     }
+//     fn from_iterator<T>(iterator: T) -> Self
+//     where
+//         T: IntoIterator,
+//         T::Item: AsRef<str>;
+// }
+
+#[derive(Deserialize, Default, Debug, Clone, Eq, PartialEq)]
+pub struct CardEffectsStruct(HashMap<CardEffectsKey, CardEffects>);
+
+impl Deref for CardEffectsStruct {
+    type Target = HashMap<CardEffectsKey, CardEffects>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for CardEffectsStruct {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+// impl<'de> TomlExtention<'de, CardEffectsKey, CardEffects> for CardEffectsStruct {
+//     fn from_iterator<T>(iterator: T) -> Self
+//     where
+//         T: IntoIterator,
+//         T::Item: AsRef<str>,
+//     {
+//         todo!()
+//     }
+
+//     fn key_value(input: &str) -> (CardEffectsKey, CardEffects) {
+//         let splitted: Vec<&str> = input.split("=").collect();
+//         if splitted.len() >= 2 {
+//             return (
+//                 CardEffectsKey::deserialize(splitted.first().unwrap()).unwrap(),
+//                 CardEffects::deserialize(splitted.last().unwrap()).unwrap(),
+//             );
+//         }
+//         // handle this case
+//         panic!("")
+//     }
+// }
+
 #[derive(Default, Clone, Deserialize, Debug)]
 pub struct Config {
     pub dirname: String,
     #[serde(default)]
-    pub cards_effects: HashMap<CardEffectsKey, CardEffects>,
+    pub cards_effects: CardEffectsStruct,
 }
 
 impl Config {
@@ -36,11 +94,11 @@ impl Config {
             },
         };
         for effects in self.cards_effects.values() {
-            match effects {
-                SingOrMult::Single(s) => match_single_card_effect(&s.0),
+            match &effects.effects {
+                SingOrMult::Single(s) => match_single_card_effect(&s.effect),
                 SingOrMult::Multiple(v_s) => {
                     for s in v_s {
-                        match_single_card_effect(&s.0)
+                        match_single_card_effect(&s.effect)
                     }
                 }
             }
@@ -61,11 +119,11 @@ impl Config {
     /// Removes unecessary values
     fn clear(&mut self) {
         for value in self.cards_effects.values_mut() {
-            match value {
-                CardEffects::Single(single) => single.0.clear(),
-                CardEffects::Multiple(v) => {
+            match &mut value.effects {
+                SingOrMult::Single(single) => single.effect.clear(),
+                SingOrMult::Multiple(v) => {
                     for single_card_effect in v {
-                        single_card_effect.0.clear()
+                        single_card_effect.effect.clear()
                     }
                 }
             }
@@ -138,16 +196,16 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsKeyVisitor {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SingOrMult<T>
 where
-    T: std::fmt::Debug + Clone,
+    T: std::fmt::Debug + Clone + Eq + PartialEq,
 {
-    Single(T),
     Multiple(Vec<T>),
+    Single(T),
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", content = "values")]
 pub enum CardPlayerAction {
     #[serde(alias = "say")]
@@ -199,7 +257,7 @@ impl<'de> Deserialize<'de> for SingOrMult<String> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SingleCardEffect {
     PlayerTurnChange(PlayerTurnChange),
     CardPlayerAction(CardPlayerAction),
@@ -259,13 +317,60 @@ impl FromStr for SingleCardEffect {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct RuleCardsEffects {
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct RuleCardsEffect {
+    #[serde(alias = "rule_name")]
     pub rule_name: String,
+    #[serde(alias = "rule_error_message")]
     pub error_message: Option<String>,
 }
 
-pub type CardEffects = SingOrMult<(SingleCardEffect, Option<RuleCardsEffects>)>;
+#[derive(Eq, PartialEq, Debug, Clone, Deserialize)]
+pub struct CardEffectsInner {
+    #[serde(alias = "effects")]
+    pub effect: SingleCardEffect,
+    #[serde(alias = "rule_info")]
+    pub rule_effect: Option<RuleCardsEffect>,
+}
+
+impl CardEffectsInner {
+    pub fn only(effect: SingleCardEffect) -> Self {
+        Self {
+            effect,
+            rule_effect: None,
+        }
+    }
+
+    pub fn new(effect: SingleCardEffect, rule_effect: RuleCardsEffect) -> Self {
+        Self {
+            effect,
+            rule_effect: Some(rule_effect),
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub struct CardEffects {
+    pub effects: SingOrMult<CardEffectsInner>,
+}
+
+impl CardEffects {
+    pub fn new(effects: SingOrMult<CardEffectsInner>) -> Self {
+        Self { effects }
+    }
+
+    pub fn single(single: CardEffectsInner) -> Self {
+        Self {
+            effects: SingOrMult::Single(single),
+        }
+    }
+
+    pub fn multiple(multiple: Vec<CardEffectsInner>) -> Self {
+        Self {
+            effects: SingOrMult::Multiple(multiple),
+        }
+    }
+}
 
 struct CardEffectsVisitor;
 
@@ -285,36 +390,87 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
         write!(formatter, "a card effect is wrong")
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        let a = v
-            .parse::<SingleCardEffect>()
-            .map_err(serde::de::Error::custom)
-            .map(|v| (CardEffects::Single((v, None))));
-        a
-    }
-
     fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
     where
-        A: serde::de::MapAccess<'de>,
+        A: de::MapAccess<'de>,
     {
-        CardPlayerAction::deserialize(serde::de::value::MapAccessDeserializer::new(map))
-            .map(|v| CardEffects::Single((SingleCardEffect::CardPlayerAction(v), None)))
+        CardEffectsInner::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+            .map(CardEffects::single)
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        v.parse::<CardEffectsInner>()
+            .map_err(serde::de::Error::custom)
+            .map(CardEffects::single)
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
-        let mut data: Vec<(SingleCardEffect, Option<RuleCardsEffects>)> = match seq.size_hint() {
+        let mut data: Vec<CardEffectsInner> = match seq.size_hint() {
             Some(s) => Vec::with_capacity(s),
             None => vec![],
         };
-        while let Some(value) = seq.next_element::<SingleCardEffect>()? {
-            data.push((value, None));
+        while let Some(value) = seq.next_element::<CardEffectsInner>()? {
+            data.push(value);
         }
-        Ok(CardEffects::Multiple(data))
+        Ok(CardEffects {
+            effects: SingOrMult::Multiple(data),
+        })
     }
 }
+
+// struct CardsEffectInnerVisitor;
+
+impl FromStr for CardEffectsInner {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<SingleCardEffect>().map(CardEffectsInner::only)
+    }
+}
+
+// impl<'de> Deserialize<'de> for CardEffectsInner {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         deserializer.deserialize_any(CardsEffectInnerVisitor)
+//     }
+// }
+
+// impl<'de> Visitor<'de> for CardsEffectInnerVisitor {
+//     type Value = CardEffectsInner;
+
+//     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+//         write!(formatter, "a card effet is wrong inside inner card effect")
+//     }
+
+//     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+//     where
+//         E: serde::de::Error,
+//     {
+//         v.parse::<CardEffectsInner>()
+//             .map_err(serde::de::Error::custom)
+//     }
+
+//     fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+//     where
+//         A: serde::de::MapAccess<'de>,
+//     {
+//         for i in map.next_key()
+//         let effect =
+//             CardPlayerAction::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+//                 .map(SingleCardEffect::CardPlayerAction)?;
+//         // let mut rule_effect = None;
+//         // let a = RuleCardsEffect::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+//         Ok(CardEffectsInner {
+//             effect,
+//             rule_effect: None,
+//         })
+//     }
+// }
