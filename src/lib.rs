@@ -118,9 +118,9 @@ mod test {
         1_diamond = [
             { effect = {type = "say", values = ["diamond", ["1", "as", "one"]]}, rule_info = {rule_name = "Rulename1"} },
             {effects = {type = "physical", values = "punch"}},
-            {effect = "up_up_2"}
+            {effect = "update_update_2"}
         ]
-        8 = {effect = "ro_up_2"}
+        8 = {effect = "rotate_update_2"}
         5 = {effect = {type = "physical", values = "cry"}}"#;
         let b: CardEffectsStruct = toml::from_str(data)?;
         let mut c = CardEffectsStruct::default();

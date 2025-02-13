@@ -61,7 +61,7 @@ impl FromStr for PlayerTurnUpdater {
         match splitted.len() {
             2 => match *splitted.first().unwrap() {
                 "set" => Ok(Self::Set(splitted.last().unwrap().parse()?)),
-                "up" => Ok(Self::Update(splitted.last().unwrap().parse()?)),
+                "update" => Ok(Self::Update(splitted.last().unwrap().parse()?)),
                 _ => Err(anyhow::anyhow!(
                     "Invalid identifier (1) for PlayerTurnUpdater"
                 )),
@@ -120,8 +120,8 @@ impl FromStr for PlayerTurnChange {
                 let updater =
                     (splitted[1].to_string() + "_" + splitted[2]).parse::<PlayerTurnUpdater>()?;
                 match *splitted.first().unwrap() {
-                    "up" => Ok(Self::Update(updater)),
-                    "ro" => Ok(Self::Rotate(updater)),
+                    "update" => Ok(Self::Update(updater)),
+                    "rotate" => Ok(Self::Rotate(updater)),
                     _ => Err(anyhow::anyhow!(
                         "Invalid identifier when parsing first item"
                     )),
