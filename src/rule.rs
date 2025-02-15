@@ -27,6 +27,7 @@ pub struct Library {
     on_event: fn(event: &MaoEvent, mao: &mut MaoCore) -> anyhow::Result<MaoEventResult>,
     get_version: fn() -> String,
     rule_data: fn() -> RuleData,
+    remove_card_effects: fn(mao: &mut MaoCore) -> anyhow::Result<()>,
 }
 
 pub struct Rule {

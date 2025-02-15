@@ -42,6 +42,64 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn remove_card_effects(&mut self, card_effects: &CardEffectsStruct) -> anyhow::Result<()> {
+        for (outer_key, outer_value) in card_effects.iter() {
+            if let Some(value_self) = self.cards_effects.get_mut(outer_key) {
+                match &mut value_self.effects {
+                    SingOrMult::Multiple(vec_self) => match &outer_value.effects {
+                        SingOrMult::Multiple(outer_vec) => {
+                            vec_self.retain(|v| !outer_vec.contains(v));
+                        }
+                        SingOrMult::Single(outer_single) => vec_self.retain(|v| v != outer_single),
+                    },
+                    SingOrMult::Single(single_self) => match &outer_value.effects {
+                        SingOrMult::Multiple(outer_vec) => {
+                            if outer_vec.contains(&single_self) {
+                                self.cards_effects.remove(outer_key);
+                            }
+                        }
+                        SingOrMult::Single(outer_single) => {
+                            if outer_single == single_self {
+                                self.cards_effects.remove(outer_key);
+                            }
+                        }
+                    },
+                }
+            }
+        }
+        Ok(())
+    }
+    pub fn merge_card_effects(
+        &mut self,
+        mut card_effects: CardEffectsStruct,
+    ) -> anyhow::Result<()> {
+        for (card_key, card_effect_outer) in card_effects.iter_mut() {
+            match self.cards_effects.get_mut(card_key) {
+                Some(card_effect_self) => match &mut card_effect_self.effects {
+                    SingOrMult::Multiple(vec_self) => match &mut card_effect_outer.effects {
+                        SingOrMult::Multiple(vec_outer) => {
+                            vec_self.append(vec_outer);
+                        }
+                        SingOrMult::Single(s) => vec_self.push(s.to_owned()),
+                    },
+                    SingOrMult::Single(s) => {
+                        let mut data: Vec<CardEffectsInner> = vec![];
+                        data.push(s.to_owned());
+                        match &mut card_effect_outer.effects {
+                            SingOrMult::Multiple(vec) => data.append(vec),
+                            SingOrMult::Single(s) => data.push(s.to_owned()),
+                        }
+                        card_effect_self.effects = SingOrMult::Multiple(data);
+                    }
+                },
+                None => {
+                    self.cards_effects
+                        .insert(card_key.to_owned(), card_effect_outer.to_owned());
+                }
+            }
+        }
+        Ok(())
+    }
     pub fn get_all_physical_actions(&self) -> HashSet<String> {
         let mut actions = HashSet::new();
         let mut match_single_card_effect = |card_effect: &SingleCardEffect| match card_effect {

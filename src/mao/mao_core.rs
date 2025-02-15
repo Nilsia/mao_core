@@ -13,8 +13,8 @@ use std::{
 use crate::{
     card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
     config::{
-        CardEffects, CardEffectsInner, CardEffectsKey, CardPlayerAction, Config, RuleCardsEffect,
-        SingOrMult, SingleCardEffect,
+        CardEffects, CardEffectsInner, CardEffectsKey, CardPlayerAction, Config, SingOrMult,
+        SingleCardEffect,
     },
     error::{DmDescription, Error},
     mao_event::{
