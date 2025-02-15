@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    fmt,
     ops::{Deref, DerefMut},
     path::PathBuf,
     str::FromStr,
@@ -12,10 +11,7 @@ use crate::{
     mao::mao_core::PlayerTurnChange,
 };
 
-use serde::{
-    de::{self, Visitor},
-    Deserialize, Deserializer,
-};
+use serde::{de, Deserialize};
 
 #[derive(Deserialize, Default, Debug, Clone, Eq, PartialEq)]
 pub struct CardEffectsStruct(HashMap<CardEffectsKey, CardEffects>);
@@ -178,65 +174,13 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsKeyVisitor {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SingOrMult<T>
-where
-    T: std::fmt::Debug + Clone + Eq + PartialEq,
-{
-    Multiple(Vec<T>),
-    Single(T),
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", content = "values")]
 pub enum CardPlayerAction {
     #[serde(alias = "say")]
-    Say(Vec<SingOrMult<String>>),
+    Say(Vec<Vec<String>>),
     #[serde(alias = "physical")]
     Physical(String),
-}
-
-impl<'de> Deserialize<'de> for SingOrMult<String> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct SingOrMultVisitor;
-        impl<'dee> Visitor<'dee> for SingOrMultVisitor {
-            type Value = SingOrMult<String>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                write!(formatter, "deserializing SingOrMult<String>")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                Ok(SingOrMult::Single(v.to_owned()))
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: de::SeqAccess<'dee>,
-            {
-                let mut data = match seq.size_hint() {
-                    Some(sisze) => Vec::with_capacity(sisze),
-                    None => vec![],
-                };
-                while let Some(value) = seq.next_element::<String>()? {
-                    data.push(value);
-                }
-                if data.len() == 1 {
-                    Ok(SingOrMult::Single(data.pop().unwrap()))
-                } else {
-                    Ok(SingOrMult::Multiple(data))
-                }
-            }
-        }
-
-        deserializer.deserialize_any(SingOrMultVisitor)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -250,10 +194,7 @@ impl SingleCardEffect {
         match self {
             SingleCardEffect::PlayerTurnChange(_) => (),
             SingleCardEffect::CardPlayerAction(a) => match a {
-                CardPlayerAction::Say(c) => c.retain(|v| match v {
-                    SingOrMult::Single(_) => true,
-                    SingOrMult::Multiple(v) => !v.is_empty(),
-                }),
+                CardPlayerAction::Say(c) => c.retain(|v| !v.is_empty()),
                 CardPlayerAction::Physical(_) => (),
             },
         }

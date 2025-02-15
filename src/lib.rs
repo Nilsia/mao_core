@@ -17,7 +17,7 @@ mod test {
         card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType},
         config::{
             CardEffects, CardEffectsInner, CardEffectsKey, CardEffectsStruct, CardPlayerAction,
-            RuleCardsEffect, SingOrMult, SingleCardEffect,
+            RuleCardsEffect, SingleCardEffect,
         },
         mao::{
             mao_action::MaoInteraction,
@@ -132,13 +132,11 @@ mod test {
             CardEffects::multiple(vec![
                 CardEffectsInner::new(
                     SingleCardEffect::CardPlayerAction(CardPlayerAction::Say(vec![
-                        SingOrMult::Single("diamond".to_owned()),
-                        SingOrMult::Multiple(
-                            vec!["1", "as", "one"]
-                                .iter()
-                                .map(|&s| String::from(s))
-                                .collect(),
-                        ),
+                        vec!["diamond".to_owned()],
+                        vec![vec!["1", "as", "one"]
+                            .iter()
+                            .map(|&s| String::from(s))
+                            .collect()],
                     ])),
                     RuleCardsEffect {
                         rule_name: "Rulename1".to_owned(),

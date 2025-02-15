@@ -12,9 +12,7 @@ use std::{
 
 use crate::{
     card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
-    config::{
-        CardEffectsInner, CardEffectsKey, CardPlayerAction, Config, SingOrMult, SingleCardEffect,
-    },
+    config::{CardEffectsInner, CardEffectsKey, CardPlayerAction, Config, SingleCardEffect},
     error::{DmDescription, Error},
     mao_event::{
         card_event::CardEvent,
@@ -824,45 +822,31 @@ impl MaoCore {
                             {
                                 match card_action {
                                     CardPlayerAction::Say(words_to_say) => {
-                                        for word_to_say in words_to_say {
-                                            match word_to_say {
-                                                SingOrMult::Single(word) => {
-                                                    // check if the required word as been said earlier
-                                                    if !say_events.iter().any(
-                                                        |(message, player_index)| {
-                                                            *player_index == card_event.player_index
-                                                                && message.contains(word)
-                                                        },
-                                                    ) {
-                                                        if let Some(rule) = rule {
-                                                            wrong_int.push(
-                                                            WrongPlayerInteraction::forgot_saying_ruled(&rule.rule_name, player_pseudo));
-                                                        } else {
-                                                            wrong_int.push(
-                                                            WrongPlayerInteraction::forgot_saying_basic(None, player_pseudo));
-                                                        }
-                                                        break;
-                                                    }
+                                        for words in words_to_say {
+                                            // check if all the words have been said earlier
+
+                                            if !say_events.iter().any(|(message, player_index)| {
+                                                *player_index == card_event.player_index
+                                                    && words
+                                                        .iter()
+                                                        .any(|word| message.contains(word))
+                                            }) {
+                                                if let Some(rule) = rule {
+                                                    wrong_int.push(
+                                                        WrongPlayerInteraction::forgot_doing_ruled(
+                                                            &rule.rule_name,
+                                                            player_pseudo,
+                                                        ),
+                                                    );
+                                                } else {
+                                                    wrong_int.push(
+                                                        WrongPlayerInteraction::forgot_saying_basic(
+                                                            None,
+                                                            player_pseudo,
+                                                        ),
+                                                    );
                                                 }
-                                                // check if all the words have been said earlier
-                                                SingOrMult::Multiple(words) => {
-                                                    if !say_events.iter().any(
-                                                        |(message, player_index)| {
-                                                            *player_index == card_event.player_index
-                                                                && words.iter().any(|word| {
-                                                                    message.contains(word)
-                                                                })
-                                                        },
-                                                    ) {
-                                                        if let Some(rule) = rule {
-                                                            wrong_int.push(WrongPlayerInteraction::forgot_doing_ruled(&rule.rule_name, player_pseudo));
-                                                        } else {
-                                                            wrong_int.push(
-                                                            WrongPlayerInteraction::forgot_saying_basic(None, player_pseudo));
-                                                        }
-                                                        break;
-                                                    }
-                                                }
+                                                break;
                                             }
                                         }
                                     }
