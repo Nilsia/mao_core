@@ -45,25 +45,11 @@ impl Config {
     pub fn remove_card_effects(&mut self, card_effects: &CardEffectsStruct) -> anyhow::Result<()> {
         for (outer_key, outer_value) in card_effects.iter() {
             if let Some(value_self) = self.cards_effects.get_mut(outer_key) {
-                match &mut value_self.effects {
-                    SingOrMult::Multiple(vec_self) => match &outer_value.effects {
-                        SingOrMult::Multiple(outer_vec) => {
-                            vec_self.retain(|v| !outer_vec.contains(v));
-                        }
-                        SingOrMult::Single(outer_single) => vec_self.retain(|v| v != outer_single),
-                    },
-                    SingOrMult::Single(single_self) => match &outer_value.effects {
-                        SingOrMult::Multiple(outer_vec) => {
-                            if outer_vec.contains(&single_self) {
-                                self.cards_effects.remove(outer_key);
-                            }
-                        }
-                        SingOrMult::Single(outer_single) => {
-                            if outer_single == single_self {
-                                self.cards_effects.remove(outer_key);
-                            }
-                        }
-                    },
+                value_self
+                    .effects_mut()
+                    .retain(|v| !outer_value.effects().contains(v));
+                if value_self.effects().is_empty() {
+                    self.cards_effects.remove(outer_key);
                 }
             }
         }
@@ -75,23 +61,11 @@ impl Config {
     ) -> anyhow::Result<()> {
         for (card_key, card_effect_outer) in card_effects.iter_mut() {
             match self.cards_effects.get_mut(card_key) {
-                Some(card_effect_self) => match &mut card_effect_self.effects {
-                    SingOrMult::Multiple(vec_self) => match &mut card_effect_outer.effects {
-                        SingOrMult::Multiple(vec_outer) => {
-                            vec_self.append(vec_outer);
-                        }
-                        SingOrMult::Single(s) => vec_self.push(s.to_owned()),
-                    },
-                    SingOrMult::Single(s) => {
-                        let mut data: Vec<CardEffectsInner> = vec![];
-                        data.push(s.to_owned());
-                        match &mut card_effect_outer.effects {
-                            SingOrMult::Multiple(vec) => data.append(vec),
-                            SingOrMult::Single(s) => data.push(s.to_owned()),
-                        }
-                        card_effect_self.effects = SingOrMult::Multiple(data);
-                    }
-                },
+                Some(card_effect_self) => {
+                    card_effect_self
+                        .effects_mut()
+                        .append(card_effect_outer.effects_mut());
+                }
                 None => {
                     self.cards_effects
                         .insert(card_key.to_owned(), card_effect_outer.to_owned());
@@ -112,13 +86,8 @@ impl Config {
             },
         };
         for effects in self.cards_effects.values() {
-            match &effects.effects {
-                SingOrMult::Single(s) => match_single_card_effect(&s.effect),
-                SingOrMult::Multiple(v_s) => {
-                    for s in v_s {
-                        match_single_card_effect(&s.effect)
-                    }
-                }
+            for s in effects.effects() {
+                match_single_card_effect(&s.effect)
             }
         }
         actions.into_iter().collect()
@@ -130,20 +99,15 @@ impl Config {
                 desc: String::from("Provided path is not a directory"),
             });
         }
-        self.clear();
+        self.sanitize();
         Ok(())
     }
 
     /// Removes unecessary values
-    fn clear(&mut self) {
+    fn sanitize(&mut self) {
         for value in self.cards_effects.values_mut() {
-            match &mut value.effects {
-                SingOrMult::Single(single) => single.effect.clear(),
-                SingOrMult::Multiple(v) => {
-                    for single_card_effect in v {
-                        single_card_effect.effect.clear()
-                    }
-                }
+            for single_card_effect in value.effects_mut() {
+                single_card_effect.effect.sanitize()
             }
         }
     }
@@ -282,7 +246,7 @@ pub enum SingleCardEffect {
 }
 
 impl SingleCardEffect {
-    pub fn clear(&mut self) {
+    pub fn sanitize(&mut self) {
         match self {
             SingleCardEffect::PlayerTurnChange(_) => (),
             SingleCardEffect::CardPlayerAction(a) => match a {
@@ -369,24 +333,28 @@ impl CardEffectsInner {
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct CardEffects {
-    pub effects: SingOrMult<CardEffectsInner>,
+    effects: Vec<CardEffectsInner>,
 }
 
 impl CardEffects {
-    pub fn new(effects: SingOrMult<CardEffectsInner>) -> Self {
+    pub fn effects(&self) -> &[CardEffectsInner] {
+        &self.effects
+    }
+    pub fn effects_mut(&mut self) -> &mut Vec<CardEffectsInner> {
+        &mut self.effects
+    }
+    pub fn new(effects: Vec<CardEffectsInner>) -> Self {
         Self { effects }
     }
 
     pub fn single(single: CardEffectsInner) -> Self {
         Self {
-            effects: SingOrMult::Single(single),
+            effects: vec![single],
         }
     }
 
     pub fn multiple(multiple: Vec<CardEffectsInner>) -> Self {
-        Self {
-            effects: SingOrMult::Multiple(multiple),
-        }
+        Self { effects: multiple }
     }
 }
 
@@ -436,9 +404,7 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
         while let Some(value) = seq.next_element::<CardEffectsInner>()? {
             data.push(value);
         }
-        Ok(CardEffects {
-            effects: SingOrMult::Multiple(data),
-        })
+        Ok(CardEffects { effects: data })
     }
 }
 

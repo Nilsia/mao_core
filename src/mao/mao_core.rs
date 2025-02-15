@@ -13,8 +13,7 @@ use std::{
 use crate::{
     card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
     config::{
-        CardEffects, CardEffectsInner, CardEffectsKey, CardPlayerAction, Config, SingOrMult,
-        SingleCardEffect,
+        CardEffectsInner, CardEffectsKey, CardPlayerAction, Config, SingOrMult, SingleCardEffect,
     },
     error::{DmDescription, Error},
     mao_event::{
@@ -332,7 +331,7 @@ impl MaoCore {
             Automaton::from_iter(Self::generate_actions()),
         );
         s.config = config.to_owned();
-        s.merge_cards_effects();
+        s.initialize_external_mao_rules()?;
         s.possible_actions = config.get_all_physical_actions().into_iter().collect();
         // verify that all rules are valid
         // TODO just not put rules that are not valid in the carbage
@@ -350,6 +349,29 @@ impl MaoCore {
         // s.activate_rule("petit_pique_grand_coeur")?;
 
         Ok(s)
+    }
+
+    pub fn activated_rules(&self) -> impl IntoIterator<Item = &Rule> {
+        return self
+            .activated_rules
+            .iter()
+            .map(|id| self.available_rules.get(*id).unwrap());
+    }
+
+    fn initialize_external_mao_rules(&mut self) -> anyhow::Result<()> {
+        for id in self.activated_rules.iter() {
+            if let Some(effects) = self
+                .available_rules
+                .get(*id)
+                .unwrap()
+                .data()
+                .cards_effects
+                .as_ref()
+            {
+                self.config.merge_card_effects(effects.to_owned())?;
+            }
+        }
+        Ok(())
     }
 
     fn generate_actions() -> Vec<Vec<NodeState>> {
@@ -424,47 +446,47 @@ impl MaoCore {
         stacks
     }
 
-    fn merge_cards_effects(&mut self) {
-        for rule_data in self.available_rules.iter().map(|rule| rule.data()) {
-            if let Some(effects) = rule_data.cards_effects.as_ref() {
-                for key in effects.keys() {
-                    let effect = effects.get(key).unwrap();
-                    if self.config.cards_effects.contains_key(&key) {
-                        match (
-                            &effect.effects,
-                            &mut self.config.cards_effects.get_mut(key).unwrap().effects,
-                        ) {
-                            (SingOrMult::Single(r), SingOrMult::Single(c)) => {
-                                let data = vec![r.to_owned(), c.to_owned()];
-                                self.config.cards_effects.insert(
-                                    key.to_owned(),
-                                    CardEffects::new(SingOrMult::Multiple(data)),
-                                );
-                            }
-                            (SingOrMult::Single(r), SingOrMult::Multiple(c)) => {
-                                c.push(r.to_owned())
-                            }
-                            (SingOrMult::Multiple(r), SingOrMult::Single(c)) => {
-                                let mut data = r.to_owned();
-                                data.push(c.to_owned());
-                                self.config.cards_effects.insert(
-                                    key.to_owned(),
-                                    CardEffects::new(SingOrMult::Multiple(data)),
-                                );
-                            }
-                            (SingOrMult::Multiple(r), SingOrMult::Multiple(c)) => {
-                                c.extend_from_slice(&r)
-                            }
-                        }
-                    } else {
-                        self.config
-                            .cards_effects
-                            .insert(key.to_owned(), effect.to_owned());
-                    }
-                }
-            }
-        }
-    }
+    // fn merge_cards_effects(&mut self) {
+    // for rule_data in self.available_rules.iter().map(|rule| rule.data()) {
+    //     if let Some(effects) = rule_data.cards_effects.as_ref() {
+    //         for key in effects.keys() {
+    //             let effect = effects.get(key).unwrap();
+    //             if self.config.cards_effects.contains_key(&key) {
+    //                 match (
+    //                     &effect.effects(),
+    //                     &mut self.config.cards_effects.get_mut(key).unwrap().effects(),
+    //                 ) {
+    //                     (SingOrMult::Single(r), SingOrMult::Single(c)) => {
+    //                         let data = vec![r.to_owned(), c.to_owned()];
+    //                         self.config.cards_effects.insert(
+    //                             key.to_owned(),
+    //                             CardEffects::new(SingOrMult::Multiple(data)),
+    //                         );
+    //                     }
+    //                     (SingOrMult::Single(r), SingOrMult::Multiple(c)) => {
+    //                         c.push(r.to_owned())
+    //                     }
+    //                     (SingOrMult::Multiple(r), SingOrMult::Single(c)) => {
+    //                         let mut data = r.to_owned();
+    //                         data.push(c.to_owned());
+    //                         self.config.cards_effects.insert(
+    //                             key.to_owned(),
+    //                             CardEffects::new(SingOrMult::Multiple(data)),
+    //                         );
+    //                     }
+    //                     (SingOrMult::Multiple(r), SingOrMult::Multiple(c)) => {
+    //                         c.extend_from_slice(&r)
+    //                     }
+    //                 }
+    //             } else {
+    //                 self.config
+    //                     .cards_effects
+    //                     .insert(key.to_owned(), effect.to_owned());
+    //             }
+    //         }
+    //     }
+    // }
+    // }
 
     pub fn new(
         available_libraries: Vec<Rule>,
@@ -1431,18 +1453,12 @@ impl MaoCore {
         ))
     }
 
-    fn get_card_effect(&self, key: CardEffectsKey) -> Vec<&CardEffectsInner> {
+    // TODO IntoIterator
+    fn get_card_effect(&self, key: CardEffectsKey) -> impl IntoIterator<Item = &CardEffectsInner> {
         if let Some(v) = self.config.cards_effects.get(&key) {
-            match v {
-                CardEffects {
-                    effects: SingOrMult::Single(s),
-                } => return vec![s],
-                CardEffects {
-                    effects: SingOrMult::Multiple(v),
-                } => return v.iter().collect(),
-            }
+            return v.effects().iter();
         }
-        vec![]
+        [].iter()
     }
 
     /// Returns all the [`CardEffects`] that a [`Card`] has on

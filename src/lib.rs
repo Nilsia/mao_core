@@ -161,13 +161,9 @@ mod test {
         );
         c.insert(
             CardEffectsKey::new(None, Some(CardValue::Number(5))),
-            CardEffects {
-                effects: SingOrMult::Single(CardEffectsInner::only(
-                    SingleCardEffect::CardPlayerAction(CardPlayerAction::Physical(
-                        "cry".to_owned(),
-                    )),
-                )),
-            },
+            CardEffects::single(CardEffectsInner::only(SingleCardEffect::CardPlayerAction(
+                CardPlayerAction::Physical("cry".to_owned()),
+            ))),
         );
         assert_eq!(b, c);
         Ok(())

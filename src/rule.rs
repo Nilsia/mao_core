@@ -1,9 +1,9 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::{
-    config::{CardEffects, CardEffectsKey},
+    config::CardEffectsStruct,
     error::Error,
     mao::{automaton::NodeState, mao_core::MaoCore},
     mao_event::{mao_event_result::MaoEventResult, MaoEvent},
@@ -19,7 +19,7 @@ pub struct RuleData {
     pub author: Option<String>,
     pub description: Option<String>,
     pub actions: Option<Vec<Vec<NodeState>>>,
-    pub cards_effects: Option<HashMap<CardEffectsKey, CardEffects>>,
+    pub cards_effects: Option<CardEffectsStruct>,
 }
 
 #[derive(WrapperApi)]
