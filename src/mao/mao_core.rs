@@ -11,7 +11,10 @@ use std::{
 };
 
 use crate::{
-    card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType, Card},
+    card::{
+        card_type::CardType, card_value::CardValue, common_card_type::CommonCardType,
+        game_card::GameCard, Card,
+    },
     config::{CardEffectsInner, CardEffectsKey, CardPlayerAction, Config, SingleCardEffect},
     error::{DmDescription, Error},
     mao_event::{
@@ -148,8 +151,8 @@ pub enum PlayerTurnResult {
     CanPlay,
     WrongTurn,
     CannotPlaceThisCard {
-        card_to_play: Card,
-        card_on_stack: Card,
+        card_to_play: GameCard,
+        card_on_stack: GameCard,
     },
     Other {
         desc: String,
@@ -279,7 +282,7 @@ impl MaoCore {
         };
 
         Ok(mao.on_draw_card(CardEvent {
-            played_card: Card::default(),
+            played_card: GameCard::default(),
             card_index: 0,
             player_index,
             stack_index,
@@ -632,7 +635,7 @@ impl MaoCore {
                     ..
                 } => format!(
                     "You cannot play this card {}",
-                    placed_card.to_string_light()
+                    placed_card.played_card().to_string_light()
                 ),
                 PlayerTurnResult::Other { desc } => desc.to_owned(),
             };
@@ -814,7 +817,8 @@ impl MaoCore {
                 for previous_event in events.iter() {
                     if let MaoEvent::PlayedCardEvent(card_event) = previous_event {
                         // get all card's effects
-                        let card_effects = self.get_card_effects(&card_event.played_card);
+                        let card_effects =
+                            self.get_card_effects(&card_event.played_card.played_card());
                         // check if all card's effects are been done
                         for effect in card_effects.iter() {
                             if let CardEffectsInner {
@@ -1010,7 +1014,7 @@ impl MaoCore {
     /// This function will return an error if
     /// - it cannot find a drawable stack
     /// - there is not enough cards inside all drawable stacks together
-    pub fn draw_multiple_cards_unchosen(&mut self, mut nb: usize) -> Result<Vec<Card>, Error> {
+    pub fn draw_multiple_cards_unchosen(&mut self, mut nb: usize) -> Result<Vec<GameCard>, Error> {
         let mut cards = Vec::with_capacity(nb);
         let mut empty_first = false;
         while nb != 0 {
@@ -1035,7 +1039,7 @@ impl MaoCore {
                         &(*stack)
                             .get_cards_mut()
                             .drain(index..)
-                            .collect::<Vec<Card>>(),
+                            .collect::<Vec<GameCard>>(),
                     );
 
                     nb = 0;
@@ -1118,7 +1122,7 @@ impl MaoCore {
     fn can_play(
         &self,
         player_index: usize,
-        card: &Card,
+        card: &GameCard,
         stack: Option<&Stack>,
     ) -> PlayerTurnResult {
         if player_index != self.player_turn {
@@ -1126,8 +1130,8 @@ impl MaoCore {
         }
         if let Some(stack) = stack {
             if let Some(top_card) = stack.top() {
-                if card.get_value() != top_card.get_value()
-                    && card.get_color() != top_card.get_color()
+                if card.played_card().get_value() != top_card.played_card().get_value()
+                    && card.played_card().get_color() != top_card.played_card().get_color()
                 {
                     return PlayerTurnResult::CannotPlaceThisCard {
                         card_to_play: card.to_owned(),
@@ -1253,7 +1257,10 @@ impl MaoCore {
     /// # Errors
     ///
     /// This function will return an error if `stack_index` is not valid
-    pub fn get_top_card_playable_stack(&self, stack_index: usize) -> Result<Option<&Card>, Error> {
+    pub fn get_top_card_playable_stack(
+        &self,
+        stack_index: usize,
+    ) -> Result<Option<&GameCard>, Error> {
         self.stacks
             .get(stack_index)
             .ok_or(Error::InvalidStackIndex {
@@ -1393,21 +1400,21 @@ impl MaoCore {
             players.push(self.init_player(pseudo.to_owned(), nb_card)?);
         }
         self.players = players;
+        // TODO for testing
         self.players
             .last_mut()
             .unwrap()
             .get_cards_mut()
-            .push(Card::new(
+            .push(GameCard::normal_card(Card::new(
                 CardValue::Number(9),
                 CardType::Common(CommonCardType::Spade),
-                None,
-            ));
+            )));
         Ok(())
     }
 
     pub fn init_all_players(&mut self, nb_card: usize) -> Result<(), Error> {
         for i in 0..self.players.len() {
-            let cards: Vec<Card> = self.draw_multiple_cards_unchosen(nb_card)?.to_vec();
+            let cards: Vec<GameCard> = self.draw_multiple_cards_unchosen(nb_card)?.to_vec();
             self.players
                 .get_mut(i)
                 .unwrap()
@@ -1431,7 +1438,7 @@ impl MaoCore {
     }
 
     /// Add a new played stack filled with the given `cards`
-    pub fn new_played_stack(&mut self, cards: &[Card], visible: bool) {
+    pub fn new_played_stack(&mut self, cards: &[GameCard], visible: bool) {
         self.stacks.push(Stack::new(
             cards.to_owned(),
             visible,
@@ -1485,7 +1492,7 @@ impl MaoCore {
                     }
                     self.previous_player_turn = Some(self.player_turn);
                     let changes: Vec<&PlayerTurnChange> = self
-                        .get_card_effects(&card_event.played_card)
+                        .get_card_effects(&card_event.played_card.played_card())
                         .iter()
                         .filter_map(|card_effect| match &card_effect.effect {
                             SingleCardEffect::PlayerTurnChange(change) => Some(change),
@@ -1649,7 +1656,7 @@ impl MaoCore {
     pub fn push_card_into_stack_target(
         &mut self,
         target_index: StackTarget,
-        card: Card,
+        card: GameCard,
     ) -> Result<(), Error> {
         self.get_stack_target(target_index)?.add_card(card);
         Ok(())
@@ -1729,7 +1736,7 @@ impl MaoCore {
         &mut self,
         target_index: StackTarget,
         card_index: usize,
-    ) -> Result<Card, Error> {
+    ) -> Result<GameCard, Error> {
         self.get_stack_target(target_index)?.remove_card(card_index)
     }
 
@@ -1915,7 +1922,7 @@ impl MaoCore {
 
 // players' actions
 impl MaoCore {
-    pub fn generate_common_draw() -> Vec<Card> {
+    pub fn generate_common_draw() -> Vec<GameCard> {
         let types = &[
             CommonCardType::Spade,
             CommonCardType::Diamond,
@@ -1925,11 +1932,10 @@ impl MaoCore {
         let mut cards = Vec::new();
         for i in 1..=13 {
             for t in types {
-                cards.push(Card::new(
+                cards.push(GameCard::normal_card(Card::new(
                     CardValue::Number(i as isize),
                     CardType::Common(t.to_owned()),
-                    None,
-                ));
+                )));
             }
         }
         cards.shuffle(&mut thread_rng());

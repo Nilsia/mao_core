@@ -1,4 +1,4 @@
-use crate::card::Card;
+use crate::card::{game_card::GameCard, Card};
 
 use self::card_event::CardEvent;
 
@@ -23,7 +23,7 @@ pub enum MaoEvent {
     DrawedCardEvent(CardEvent),
     /// Released when a player attempts to give a card to a target which implements [`StackPropoerty`]
     GiveCardEvent {
-        card: Card,
+        card: GameCard,
         from_player_index: usize,
         target: StackTarget,
     },
@@ -66,12 +66,12 @@ impl MaoEvent {
     }
 
     /// Returns the concerned [`Card`] of the event if the event is about a card event
-    pub fn get_card(&self) -> Option<&Card> {
+    pub fn get_card(&self) -> Option<&GameCard> {
         match self {
             MaoEvent::PlayedCardEvent(ref e) => Some(&e.played_card),
             MaoEvent::DiscardCardEvent(ref e) => Some(&e.played_card),
             MaoEvent::DrawedCardEvent(ref e) => Some(&e.played_card),
-            MaoEvent::GiveCardEvent { card, .. } => Some(card),
+            MaoEvent::GiveCardEvent { card, .. } => Some(&card),
             MaoEvent::StackPropertyRunsOut { .. } => None,
             MaoEvent::GameStart => None,
             MaoEvent::EndPlayerTurn { .. } => None,

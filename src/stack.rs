@@ -1,4 +1,4 @@
-use crate::card::Card;
+use crate::card::{game_card::GameCard, Card};
 
 use self::{stack_property::StackProperty, stack_type::StackType};
 
@@ -7,7 +7,7 @@ pub mod stack_type;
 
 #[derive(Debug)]
 pub struct Stack {
-    cards: Vec<Card>,
+    cards: Vec<GameCard>,
     visible: bool,
     stack_type: Vec<StackType>,
     #[allow(dead_code)]
@@ -15,7 +15,7 @@ pub struct Stack {
 }
 
 impl Stack {
-    pub fn new(cards: Vec<Card>, visible: bool, stack_type: Vec<StackType>) -> Self {
+    pub fn new(cards: Vec<GameCard>, visible: bool, stack_type: Vec<StackType>) -> Self {
         Self {
             cards,
             visible,
@@ -51,20 +51,20 @@ impl Stack {
         &mut self.stack_type
     }
 
-    pub fn top(&self) -> Option<&Card> {
+    pub fn top(&self) -> Option<&GameCard> {
         self.cards.last()
     }
-    pub fn top_mut(&mut self) -> Option<&mut Card> {
+    pub fn top_mut(&mut self) -> Option<&mut GameCard> {
         self.cards.last_mut()
     }
 
-    pub fn draw_card(&mut self) -> Option<Card> {
+    pub fn draw_card(&mut self) -> Option<GameCard> {
         self.cards.pop()
     }
 }
 
 impl std::ops::Deref for Stack {
-    type Target = Vec<Card>;
+    type Target = Vec<GameCard>;
 
     fn deref(&self) -> &Self::Target {
         &self.cards
@@ -77,11 +77,11 @@ impl std::ops::DerefMut for Stack {
 }
 
 impl StackProperty for Stack {
-    fn get_cards(&self) -> &[Card] {
+    fn get_cards(&self) -> &[GameCard] {
         &self.cards
     }
 
-    fn get_cards_mut(&mut self) -> &mut Vec<Card> {
+    fn get_cards_mut(&mut self) -> &mut Vec<GameCard> {
         &mut self.cards
     }
 }

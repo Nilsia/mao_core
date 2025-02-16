@@ -1,8 +1,8 @@
-use crate::card::Card;
+use crate::card::game_card::GameCard;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct CardEvent {
-    pub played_card: Card,
+    pub played_card: GameCard,
     pub card_index: usize,
     pub player_index: usize,
     pub stack_index: Option<usize>,
@@ -10,7 +10,7 @@ pub struct CardEvent {
 
 impl CardEvent {
     pub fn new(
-        card: Card,
+        card: GameCard,
         player_index: usize,
         stack_index: Option<usize>,
         card_index: usize,

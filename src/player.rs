@@ -1,13 +1,16 @@
-use crate::{card::Card, stack::stack_property::StackProperty};
+use crate::{
+    card::{game_card::GameCard, Card},
+    stack::stack_property::StackProperty,
+};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct Player {
     pseudo: String,
-    hand: Vec<Card>, // (rule name, card)
+    hand: Vec<GameCard>, // (rule name, card)
 }
 
 impl Player {
-    pub fn new(pseudo: String, hand: Vec<Card>) -> Self {
+    pub fn new(pseudo: String, hand: Vec<GameCard>) -> Self {
         Self { pseudo, hand }
     }
 
@@ -17,11 +20,11 @@ impl Player {
 }
 
 impl StackProperty for Player {
-    fn get_cards(&self) -> &[Card] {
+    fn get_cards(&self) -> &[GameCard] {
         &self.hand
     }
 
-    fn get_cards_mut(&mut self) -> &mut Vec<Card> {
+    fn get_cards_mut(&mut self) -> &mut Vec<GameCard> {
         &mut self.hand
     }
 }

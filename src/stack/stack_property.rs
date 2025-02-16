@@ -1,9 +1,12 @@
-use crate::{card::Card, error::Error};
+use crate::{
+    card::{game_card::GameCard, Card},
+    error::Error,
+};
 
 pub trait StackProperty: std::fmt::Debug {
-    fn get_cards(&self) -> &[Card];
-    fn get_cards_mut(&mut self) -> &mut Vec<Card>;
-    fn remove_card(&mut self, card_index: usize) -> Result<Card, Error> {
+    fn get_cards(&self) -> &[GameCard];
+    fn get_cards_mut(&mut self) -> &mut Vec<GameCard>;
+    fn remove_card(&mut self, card_index: usize) -> Result<GameCard, Error> {
         if card_index >= self.get_cards_mut().len() {
             Err(Error::InvalidCardIndex {
                 card_index,
@@ -13,7 +16,7 @@ pub trait StackProperty: std::fmt::Debug {
             Ok(self.get_cards_mut().remove(card_index))
         }
     }
-    fn add_card(&mut self, card: Card) {
+    fn add_card(&mut self, card: GameCard) {
         self.get_cards_mut().push(card)
     }
 }
