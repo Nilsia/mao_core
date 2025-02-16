@@ -16,6 +16,56 @@ use serde::{de, Deserialize};
 #[derive(Deserialize, Default, Debug, Clone, Eq, PartialEq)]
 pub struct CardEffectsStruct(HashMap<CardEffectsKey, CardEffects>);
 
+impl CardEffectsStruct {
+    pub fn add_rule_name(&mut self, rule_name: &str) -> anyhow::Result<()> {
+        for effects in self.values_mut() {
+            for effect in effects.effects_mut() {
+                match &mut effect.rule_effect {
+                    Some(v) => v.rule_name = rule_name.to_owned(),
+                    None => {
+                        effect.rule_effect = Some(RuleCardsEffect {
+                            rule_name: rule_name.to_owned(),
+                            error_message: None,
+                        })
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+    pub fn remove_card_effects(&mut self, card_effects: &CardEffectsStruct) -> anyhow::Result<()> {
+        for (outer_key, outer_value) in card_effects.iter() {
+            if let Some(value_self) = self.get_mut(outer_key) {
+                value_self
+                    .effects_mut()
+                    .retain(|v| !outer_value.effects().contains(v));
+                if value_self.effects().is_empty() {
+                    self.remove(outer_key);
+                }
+            }
+        }
+        Ok(())
+    }
+    pub fn merge_card_effects(
+        &mut self,
+        mut card_effects: CardEffectsStruct,
+    ) -> anyhow::Result<()> {
+        for (card_key, card_effect_outer) in card_effects.iter_mut() {
+            match self.get_mut(card_key) {
+                Some(card_effect_self) => {
+                    card_effect_self
+                        .effects_mut()
+                        .append(card_effect_outer.effects_mut());
+                }
+                None => {
+                    self.insert(card_key.to_owned(), card_effect_outer.to_owned());
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Deref for CardEffectsStruct {
     type Target = HashMap<CardEffectsKey, CardEffects>;
 
@@ -38,38 +88,6 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn remove_card_effects(&mut self, card_effects: &CardEffectsStruct) -> anyhow::Result<()> {
-        for (outer_key, outer_value) in card_effects.iter() {
-            if let Some(value_self) = self.cards_effects.get_mut(outer_key) {
-                value_self
-                    .effects_mut()
-                    .retain(|v| !outer_value.effects().contains(v));
-                if value_self.effects().is_empty() {
-                    self.cards_effects.remove(outer_key);
-                }
-            }
-        }
-        Ok(())
-    }
-    pub fn merge_card_effects(
-        &mut self,
-        mut card_effects: CardEffectsStruct,
-    ) -> anyhow::Result<()> {
-        for (card_key, card_effect_outer) in card_effects.iter_mut() {
-            match self.cards_effects.get_mut(card_key) {
-                Some(card_effect_self) => {
-                    card_effect_self
-                        .effects_mut()
-                        .append(card_effect_outer.effects_mut());
-                }
-                None => {
-                    self.cards_effects
-                        .insert(card_key.to_owned(), card_effect_outer.to_owned());
-                }
-            }
-        }
-        Ok(())
-    }
     pub fn get_all_physical_actions(&self) -> HashSet<String> {
         let mut actions = HashSet::new();
         let mut match_single_card_effect = |card_effect: &SingleCardEffect| match card_effect {
@@ -99,7 +117,7 @@ impl Config {
         Ok(())
     }
 
-    /// Removes unecessary values
+    /// Removes unecessary values and empty values
     fn sanitize(&mut self) {
         for value in self.cards_effects.values_mut() {
             for single_card_effect in value.effects_mut() {

@@ -366,7 +366,9 @@ impl MaoCore {
                 .cards_effects
                 .as_ref()
             {
-                self.config.merge_card_effects(effects.to_owned())?;
+                self.config
+                    .cards_effects
+                    .merge_card_effects(effects.to_owned())?;
             }
         }
         Ok(())
