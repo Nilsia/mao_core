@@ -1,4 +1,9 @@
-use crate::mao::mao_core::{MaoActionResult, MaoCore};
+use std::collections::HashMap;
+
+use crate::mao::{
+    mao_core::{MaoActionResult, MaoCore},
+    Data,
+};
 
 use super::MaoEvent;
 

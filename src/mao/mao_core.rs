@@ -32,6 +32,7 @@ use crate::{
 use super::{
     automaton::{Automaton, MaoInteractionResult, NodeState, PlayerAction},
     mao_action::MaoInteraction,
+    Data, DataContainer,
 };
 
 pub fn log<T>(msg: T) -> anyhow::Result<()>
@@ -220,6 +221,18 @@ pub struct MaoCore {
     dealer: usize,
     config: Config,
     possible_actions: Vec<String>,
+
+    mao_data: Data,
+}
+
+impl DataContainer for MaoCore {
+    fn data(&self) -> &Data {
+        &self.mao_data
+    }
+
+    fn data_mut(&mut self) -> &mut Data {
+        &mut self.mao_data
+    }
 }
 
 // getters and setters
@@ -449,48 +462,6 @@ impl MaoCore {
         stacks
     }
 
-    // fn merge_cards_effects(&mut self) {
-    // for rule_data in self.available_rules.iter().map(|rule| rule.data()) {
-    //     if let Some(effects) = rule_data.cards_effects.as_ref() {
-    //         for key in effects.keys() {
-    //             let effect = effects.get(key).unwrap();
-    //             if self.config.cards_effects.contains_key(&key) {
-    //                 match (
-    //                     &effect.effects(),
-    //                     &mut self.config.cards_effects.get_mut(key).unwrap().effects(),
-    //                 ) {
-    //                     (SingOrMult::Single(r), SingOrMult::Single(c)) => {
-    //                         let data = vec![r.to_owned(), c.to_owned()];
-    //                         self.config.cards_effects.insert(
-    //                             key.to_owned(),
-    //                             CardEffects::new(SingOrMult::Multiple(data)),
-    //                         );
-    //                     }
-    //                     (SingOrMult::Single(r), SingOrMult::Multiple(c)) => {
-    //                         c.push(r.to_owned())
-    //                     }
-    //                     (SingOrMult::Multiple(r), SingOrMult::Single(c)) => {
-    //                         let mut data = r.to_owned();
-    //                         data.push(c.to_owned());
-    //                         self.config.cards_effects.insert(
-    //                             key.to_owned(),
-    //                             CardEffects::new(SingOrMult::Multiple(data)),
-    //                         );
-    //                     }
-    //                     (SingOrMult::Multiple(r), SingOrMult::Multiple(c)) => {
-    //                         c.extend_from_slice(&r)
-    //                     }
-    //                 }
-    //             } else {
-    //                 self.config
-    //                     .cards_effects
-    //                     .insert(key.to_owned(), effect.to_owned());
-    //             }
-    //         }
-    //     }
-    // }
-    // }
-
     pub fn new(
         available_libraries: Vec<Rule>,
         stacks: Vec<Stack>,
@@ -511,6 +482,7 @@ impl MaoCore {
             config: Config::default(),
             previous_player_turn: None,
             possible_actions: Vec::new(),
+            mao_data: Data::default(),
         }
     }
 
