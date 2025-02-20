@@ -192,11 +192,57 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsKeyVisitor {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OneOrMoreWords(pub Vec<String>);
+
+impl Deref for OneOrMoreWords {
+    type Target = [String];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for OneOrMoreWords {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        struct SayContainerVisitor;
+        impl<'dee> serde::de::Visitor<'dee> for SayContainerVisitor {
+            type Value = OneOrMoreWords;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "deserializing SayContainer")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(OneOrMoreWords(vec![String::from(v)]))
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'dee>,
+            {
+                let mut v = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                while let Some(c) = seq.next_element()? {
+                    v.push(c);
+                }
+                Ok(OneOrMoreWords(v))
+            }
+        }
+        deserializer.deserialize_any(SayContainerVisitor)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", content = "values")]
 pub enum CardPlayerAction {
     #[serde(alias = "say")]
-    Say(Vec<Vec<String>>),
+    Say(Vec<OneOrMoreWords>),
     #[serde(alias = "physical")]
     Physical(String),
 }
@@ -212,7 +258,7 @@ impl SingleCardEffect {
         match self {
             SingleCardEffect::PlayerTurnChange(_) => (),
             SingleCardEffect::CardPlayerAction(a) => match a {
-                CardPlayerAction::Say(c) => c.retain(|v| !v.is_empty()),
+                CardPlayerAction::Say(c) => c.retain(|v| !v.0.is_empty()),
                 CardPlayerAction::Physical(_) => (),
             },
         }

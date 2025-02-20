@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use dlopen2::wrapper::{Container, WrapperApi};
 
@@ -15,9 +15,9 @@ type OnEventFunctionSignature =
 
 #[derive(Default)]
 pub struct RuleData {
-    pub name: String,
-    pub author: Option<String>,
-    pub description: Option<String>,
+    pub name: Arc<str>,
+    pub author: Option<Arc<str>>,
+    pub description: Option<Arc<str>>,
     pub actions: Option<Vec<Vec<NodeState>>>,
     pub cards_effects: Option<CardEffectsStruct>,
 }
@@ -27,7 +27,7 @@ pub struct Library {
     on_event: fn(event: &MaoEvent, mao: &mut MaoCore) -> anyhow::Result<MaoEventResult>,
     get_version: fn() -> String,
     rule_data: fn() -> RuleData,
-    remove_card_effects: fn(mao: &mut MaoCore) -> anyhow::Result<()>,
+    remove_card_effects: Option<fn(mao: &mut MaoCore) -> anyhow::Result<()>>,
 }
 
 pub struct Rule {

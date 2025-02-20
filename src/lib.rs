@@ -12,6 +12,7 @@ pub const VERSION: &str = "1.0";
 #[cfg(test)]
 mod test {
 
+    use super::config::OneOrMoreWords;
     use super::mao::automaton::*;
     use crate::{
         card::{card_type::CardType, card_value::CardValue, common_card_type::CommonCardType},
@@ -132,11 +133,13 @@ mod test {
             CardEffects::multiple(vec![
                 CardEffectsInner::new(
                     SingleCardEffect::CardPlayerAction(CardPlayerAction::Say(vec![
-                        vec!["diamond".to_owned()],
-                        vec![vec!["1", "as", "one"]
-                            .iter()
-                            .map(|&s| String::from(s))
-                            .collect()],
+                        OneOrMoreWords(vec!["diamond".to_owned()]),
+                        OneOrMoreWords(
+                            vec!["1", "as", "one"]
+                                .iter()
+                                .map(|&s| String::from(s))
+                                .collect(),
+                        ),
                     ])),
                     RuleCardsEffect {
                         rule_name: "Rulename1".to_owned(),

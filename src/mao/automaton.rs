@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use indextree::{Arena, NodeId};
 
 use crate::{
@@ -70,7 +72,7 @@ pub type CallbackInteraction =
 #[derive(Debug, Clone, Default)]
 pub struct NodeState {
     pub action: MaoInteraction,
-    pub rule: Option<String>,
+    pub rule: Option<Arc<str>>,
     pub func: Option<CallbackInteraction>,
 }
 
@@ -100,7 +102,11 @@ impl NodeState {
         func: Option<CallbackInteraction>,
         rule: Option<String>,
     ) -> Self {
-        Self { action, func, rule }
+        Self {
+            action,
+            func,
+            rule: rule.map(|v| v.into()),
+        }
     }
 }
 

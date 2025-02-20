@@ -1,12 +1,14 @@
+use std::sync::Arc;
+
 use crate::{
-    card::{game_card::GameCard, Card},
+    card::game_card::GameCard,
     mao::{Data, DataContainer},
     stack::stack_property::StackProperty,
 };
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Player {
-    pseudo: String,
+    pseudo: Arc<str>,
     hand: Vec<GameCard>, // (rule name, card)
     player_data: Data,
 }
@@ -14,14 +16,14 @@ pub struct Player {
 impl Player {
     pub fn new(pseudo: String, hand: Vec<GameCard>) -> Self {
         Self {
-            pseudo,
+            pseudo: pseudo.into(),
             hand,
             player_data: Data::default(),
         }
     }
 
-    pub fn get_pseudo(&self) -> &str {
-        &self.pseudo
+    pub fn get_pseudo(&self) -> Arc<str> {
+        Arc::clone(&self.pseudo)
     }
 }
 

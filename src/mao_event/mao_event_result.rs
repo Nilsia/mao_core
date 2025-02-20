@@ -1,9 +1,6 @@
-use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::mao::{
-    mao_core::{MaoActionResult, MaoCore},
-    Data,
-};
+use crate::mao::mao_core::{MaoActionResult, MaoCore};
 
 use super::MaoEvent;
 
@@ -15,7 +12,7 @@ pub type OtherRulesCallbackFunction =
 
 #[derive(Clone, Debug)]
 pub struct Disallow {
-    pub rule: String,
+    pub rule: Arc<str>,
     pub msg: String,
     pub penality: Option<PenalityCallbackFunction>,
 }
@@ -49,9 +46,9 @@ impl AsRef<str> for CardPlayerActionType {
 pub struct ForgotSomething {
     pub msg: Option<String>,
     pub forgot_type: CardPlayerActionType,
-    pub rule: Option<String>,
+    pub rule: Option<Arc<str>>,
     pub penality: Option<PenalityCallbackFunction>,
-    pub player_pseudo: String,
+    pub player_pseudo: Arc<str>,
 }
 
 impl std::fmt::Display for ForgotSomething {
@@ -74,7 +71,7 @@ impl PartialEq for Disallow {
 }
 
 impl Disallow {
-    pub fn new(rule: String, msg: String, penality: Option<PenalityCallbackFunction>) -> Self {
+    pub fn new(rule: Arc<str>, msg: String, penality: Option<PenalityCallbackFunction>) -> Self {
         Self {
             rule,
             msg,
@@ -90,7 +87,10 @@ pub enum Necessary {
     /// This means that the event is necessary by the basic rules of the Mao
     BasicRule(bool),
     /// This means that the event is necessary by a rule
-    ImportedRule { necessary: bool, rule_name: String },
+    ImportedRule {
+        necessary: bool,
+        rule_name: Arc<str>,
+    },
 }
 
 pub struct MaoEventResult {
@@ -123,9 +123,9 @@ pub enum WrongPlayerInteraction {
 impl WrongPlayerInteraction {
     pub fn forgot_doing(
         msg: Option<String>,
-        rule: Option<String>,
+        rule: Option<Arc<str>>,
         penality: Option<PenalityCallbackFunction>,
-        player_pseudo: String,
+        player_pseudo: Arc<str>,
     ) -> Self {
         Self::ForgotSomething(ForgotSomething {
             forgot_type: CardPlayerActionType::Do,
@@ -137,9 +137,9 @@ impl WrongPlayerInteraction {
     }
     pub fn forgot_saying(
         msg: Option<String>,
-        rule: Option<String>,
+        rule: Option<Arc<str>>,
         penality: Option<PenalityCallbackFunction>,
-        player_pseudo: String,
+        player_pseudo: Arc<str>,
     ) -> Self {
         Self::ForgotSomething(ForgotSomething {
             forgot_type: CardPlayerActionType::Say,
@@ -150,17 +150,17 @@ impl WrongPlayerInteraction {
         })
     }
 
-    pub(crate) fn forgot_saying_basic(msg: Option<String>, player_pseudo: &str) -> Self {
-        Self::forgot_saying(msg, None, None, player_pseudo.to_owned())
+    pub(crate) fn forgot_saying_basic(msg: Option<String>, player_pseudo: Arc<str>) -> Self {
+        Self::forgot_saying(msg, None, None, player_pseudo)
     }
-    pub(crate) fn forgot_doing_basic(msg: Option<String>, player_pseudo: &str) -> Self {
-        Self::forgot_doing(msg, None, None, player_pseudo.to_owned())
+    pub(crate) fn forgot_doing_basic(msg: Option<String>, player_pseudo: Arc<str>) -> Self {
+        Self::forgot_doing(msg, None, None, player_pseudo)
     }
-    pub(crate) fn forgot_saying_ruled(rule: &str, player_pseudo: &str) -> Self {
-        Self::forgot_saying(None, Some(rule.to_owned()), None, player_pseudo.to_owned())
+    pub(crate) fn forgot_saying_ruled(rule: Arc<str>, player_pseudo: Arc<str>) -> Self {
+        Self::forgot_saying(None, Some(rule), None, player_pseudo)
     }
-    pub(crate) fn forgot_doing_ruled(rule: &str, player_pseudo: &str) -> Self {
-        Self::forgot_doing(None, Some(rule.to_owned()), None, player_pseudo.to_owned())
+    pub(crate) fn forgot_doing_ruled(rule: Arc<str>, player_pseudo: Arc<str>) -> Self {
+        Self::forgot_doing(None, Some(rule), None, player_pseudo)
     }
 }
 

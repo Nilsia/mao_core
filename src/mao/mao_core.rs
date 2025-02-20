@@ -8,6 +8,7 @@ use std::{
     ops::{DerefMut, Range},
     path::PathBuf,
     str::FromStr,
+    sync::Arc,
 };
 
 use crate::{
@@ -223,6 +224,7 @@ pub struct MaoCore {
     possible_actions: Vec<String>,
 
     mao_data: Data,
+    basic_rule_str: Arc<str>,
 }
 
 impl DataContainer for MaoCore {
@@ -483,6 +485,7 @@ impl MaoCore {
             previous_player_turn: None,
             possible_actions: Vec::new(),
             mao_data: Data::default(),
+            basic_rule_str: String::from("Base Rule").into(),
         }
     }
 
@@ -612,7 +615,7 @@ impl MaoCore {
                 PlayerTurnResult::Other { desc } => desc.to_owned(),
             };
             res_wrong_int.push(WrongPlayerInteraction::Disallow(Disallow::new(
-                "Basic Rules".to_string(),
+                Arc::clone(&self.basic_rule_str),
                 msg,
                 None,
             )));
@@ -812,15 +815,15 @@ impl MaoCore {
                                                 if let Some(rule) = rule {
                                                     wrong_int.push(
                                                         WrongPlayerInteraction::forgot_doing_ruled(
-                                                            &rule.rule_name,
-                                                            player_pseudo,
+                                                            rule.rule_name.to_owned().into(),
+                                                            Arc::clone(&player_pseudo),
                                                         ),
                                                     );
                                                 } else {
                                                     wrong_int.push(
                                                         WrongPlayerInteraction::forgot_saying_basic(
                                                             None,
-                                                            player_pseudo,
+                                                            Arc::clone(&player_pseudo),
                                                         ),
                                                     );
                                                 }
@@ -836,7 +839,7 @@ impl MaoCore {
                                             wrong_int.push(
                                                 WrongPlayerInteraction::forgot_doing_basic(
                                                     None,
-                                                    player_pseudo,
+                                                    Arc::clone(&player_pseudo),
                                                 ),
                                             );
                                         }

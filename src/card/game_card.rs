@@ -44,4 +44,12 @@ impl GameCard {
     pub fn played_card(&self) -> &Card {
         self.supposed_card.as_ref().unwrap_or(&self.real_card)
     }
+
+    pub fn visibility(&self) -> &GameCardVisibility {
+        &self.visibility
+    }
+
+    pub fn rule(&self) -> Option<&str> {
+        self.rule.as_ref().map(|v| v.as_str())
+    }
 }
