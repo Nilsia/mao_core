@@ -1,4 +1,4 @@
-use crate::card::{game_card::GameCard, Card};
+use crate::card::game_card::GameCard;
 
 use self::{stack_property::StackProperty, stack_type::StackType};
 

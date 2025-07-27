@@ -1,7 +1,4 @@
-use crate::{
-    card::{game_card::GameCard, Card},
-    error::Error,
-};
+use crate::{card::game_card::GameCard, error::Error};
 
 pub trait StackProperty: std::fmt::Debug {
     fn get_cards(&self) -> &[GameCard];
@@ -18,5 +15,19 @@ pub trait StackProperty: std::fmt::Debug {
     }
     fn add_card(&mut self, card: GameCard) {
         self.get_cards_mut().push(card)
+    }
+    fn get_card(&self, card_index: usize) -> Result<&GameCard, Error> {
+        self.get_cards()
+            .get(card_index)
+            .ok_or(Error::InvalidCardIndex {
+                card_index,
+                len: self.get_cards().len(),
+            })
+    }
+    fn get_card_mut(&mut self, card_index: usize) -> Result<&mut GameCard, Error> {
+        let len = self.get_cards().len();
+        self.get_cards_mut()
+            .get_mut(card_index)
+            .ok_or(Error::InvalidCardIndex { card_index, len })
     }
 }

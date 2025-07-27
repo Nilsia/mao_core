@@ -74,6 +74,10 @@ impl Rule {
         self.data.actions.as_ref().map(|v| &**v)
     }
 
+    pub(crate) fn get_actions_mut(&mut self) -> Option<&mut Vec<Vec<NodeState>>> {
+        self.data.actions.as_mut()
+    }
+
     pub fn is_valid_rule(&self, mao: &mut MaoCore) -> Result<(), Error> {
         let event = MaoEvent::VerifyEvent;
         (self.get_on_event_func())(&event, mao).unwrap();

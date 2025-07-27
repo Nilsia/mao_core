@@ -4,6 +4,25 @@ use crate::{mao::automaton::PlayerAction, stack::stack_type::StackType};
 pub struct DmDescription(pub(crate) String);
 
 #[derive(Debug)]
+pub enum PreviousInteractionError {
+    PreviousInteractionSetterError {
+        action: PlayerAction,
+        possibilities: usize,
+    },
+}
+
+impl std::fmt::Display for PreviousInteractionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PreviousInteractionError::PreviousInteractionSetterError {
+                action,
+                possibilities,
+            } => write!(f, "action : {action}, possibilities : {possibilities}"),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum Error {
     RuleNotValid {
         desc: DmDescription,
@@ -63,6 +82,7 @@ pub enum Error {
         rule_name: String,
     },
     InvalidExpectingValue(String),
+    PreviousInteractionError(PreviousInteractionError),
 }
 
 impl Error {
@@ -152,6 +172,10 @@ impl std::fmt::Display for Error {
                 )
             }
             Error::InvalidExpectingValue(s) => f.write_str(s),
+            Error::PreviousInteractionError(previous_interaction_error) => write!(
+                f,
+                "Previous interaction error : {previous_interaction_error}"
+            ),
         }
     }
 }

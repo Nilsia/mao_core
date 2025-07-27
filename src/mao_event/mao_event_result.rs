@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::mao::mao_core::{MaoActionResult, MaoCore};
+use crate::{
+    card::Card,
+    mao::mao_core::{MaoActionResult, MaoCore},
+};
 
 use super::MaoEvent;
 
@@ -112,12 +115,52 @@ impl MaoEventResult {
     }
 }
 
+pub enum PlayerInteractionResult {
+    Request(PlayerInteractionRequest),
+    Wrong(WrongPlayerInteraction),
+}
+
+#[derive(Clone, Debug)]
+pub struct PlayerInteractionRequest {
+    pub rule: Arc<str>,
+    pub request_type: PlayerInteractionRequestType,
+    /// (mao_core, prevous_request, request_response)
+    pub rule_callback: fn(
+        &mut MaoCore,
+        PlayerInteractionRequest,
+        PlayerInteractionRequest,
+    ) -> anyhow::Result<Vec<PlayerInteractionResult>>,
+    pub description: String,
+    pub player_index: usize,
+}
+
+impl PlayerInteractionRequest {
+    pub fn generate_response(&self, request_type_response: PlayerInteractionRequestType) -> Self {
+        Self {
+            rule: Arc::clone(&self.rule),
+            request_type: request_type_response,
+            rule_callback: self.rule_callback,
+            description: String::new(),
+            player_index: self.player_index,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum PlayerInteractionRequestType {
+    Custom(String),
+    Card(Option<Card>),
+    Confirmation(bool),
+}
+
 #[derive(Clone, Debug)]
 pub enum WrongPlayerInteraction {
     /// The event has been disallowed by the rule
     Disallow(Disallow),
     /// The player forgot to do/say/... something
     ForgotSomething(ForgotSomething),
+    /// When has to give a penality to a player
+    GivePenality(GivePenality),
 }
 
 impl WrongPlayerInteraction {
@@ -172,7 +215,28 @@ impl std::fmt::Display for WrongPlayerInteraction {
             match self {
                 WrongPlayerInteraction::Disallow(dis) => dis.to_string(),
                 WrongPlayerInteraction::ForgotSomething(f) => f.to_string(),
+                WrongPlayerInteraction::GivePenality(give_penality) => give_penality.to_string(),
             }
+        )
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GivePenality {
+    pub msg: Option<String>,
+    pub rule: Option<Arc<str>>,
+    pub penality: Option<PenalityCallbackFunction>,
+    pub player_index: usize,
+}
+
+impl std::fmt::Display for GivePenality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let basic = "basic";
+        write!(
+            f,
+            "GivePenality: {} ({})",
+            self.player_index,
+            self.rule.as_deref().unwrap_or(basic),
         )
     }
 }
