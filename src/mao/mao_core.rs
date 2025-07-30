@@ -1121,6 +1121,32 @@ impl MaoCore {
             })
     }
 
+    /// Returns the last played stack if found, the first option corresponds to the exitance of a PlayedEventCard
+    /// the inner to the existance of a stack in the last PlayedEventCard found
+    pub fn get_last_played_stack(&self) -> Option<Option<&Stack>> {
+        self.player_events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                MaoEvent::PlayedCardEvent(card_event) => {
+                    Some(card_event.stack_index.and_then(|i| self.stacks.get(i)))
+                }
+                _ => None,
+            })
+    }
+
+    /// Returns the last played stack if found, the first option corresponds to the exitance of a PlayedEventCard
+    /// the inner to the existance of a stack in the last PlayedEventCard found
+    pub fn get_last_played_stack_index(&self) -> Option<Option<usize>> {
+        self.player_events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                MaoEvent::PlayedCardEvent(card_event) => Some(card_event.stack_index),
+                _ => None,
+            })
+    }
+
     pub fn get_executed_actions(&self) -> Vec<&NodeState> {
         self.automaton.get_executed_actions()
     }

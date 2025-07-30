@@ -97,4 +97,8 @@ impl GameCard {
     pub fn played_by(&self) -> Option<usize> {
         self.played_by
     }
+
+    pub fn clear_properties(&mut self) {
+        *self = Self::normal_card(self.real_card.clone())
+    }
 }

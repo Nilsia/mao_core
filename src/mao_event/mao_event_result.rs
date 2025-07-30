@@ -231,13 +231,17 @@ pub struct GivePenality {
 
 impl std::fmt::Display for GivePenality {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let basic = "basic";
-        write!(
-            f,
-            "GivePenality: {} ({})",
-            self.player_index,
-            self.rule.as_deref().unwrap_or(basic),
-        )
+        if let Some(msg) = self.msg.as_ref() {
+            f.write_str(msg)
+        } else {
+            let basic = "basic";
+            write!(
+                f,
+                "Player {} you got a penality (rule: {})",
+                self.player_index,
+                self.rule.as_deref().unwrap_or(basic)
+            )
+        }
     }
 }
 
