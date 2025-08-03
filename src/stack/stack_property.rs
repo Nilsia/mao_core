@@ -30,4 +30,11 @@ pub trait StackProperty: std::fmt::Debug {
             .get_mut(card_index)
             .ok_or(Error::InvalidCardIndex { card_index, len })
     }
+
+    fn switch_cards_with(&mut self, other: &mut dyn StackProperty) {
+        let save: Vec<_> = self.get_cards_mut().drain(..).collect();
+        self.get_cards_mut().extend_from_slice(other.get_cards());
+        other.get_cards_mut().clear();
+        other.get_cards_mut().extend_from_slice(&save);
+    }
 }

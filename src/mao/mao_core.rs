@@ -1,5 +1,3 @@
-use core::result::Result;
-
 use rand::{seq::SliceRandom, thread_rng};
 use serde::Deserialize;
 use std::{
@@ -2074,6 +2072,106 @@ impl MaoCore {
         }
 
         Ok(turn_ends_wrong_int)
+    }
+
+    pub(crate) fn get_two_of_stack_properties<'a, T>(
+        data: &'a mut Vec<T>,
+        a: usize,
+        b: usize,
+        error: fn(index: usize, len: usize) -> Error,
+    ) -> Result<Option<(&'a mut dyn StackProperty, &'a mut dyn StackProperty)>, Error>
+    where
+        T: StackProperty,
+    {
+        if a == b {
+            return Ok(None);
+        } else if a > b {
+            return MaoCore::get_two_of_stack_properties(data, b, a, error);
+        }
+        let len = data.len();
+        // assert a < b
+        if b >= len {
+            return Err(error(b, len));
+        }
+        let split = data.split_at_mut(b);
+        Ok(Some((
+            // cannot fail (checked before in a way)
+            split.1.get_mut(0).unwrap(),
+            split.0.get_mut(a).unwrap(),
+        )))
+    }
+
+    /// Switch a deck of two Stacks or Players (`StackTarget`)
+    ///
+    /// # Panics
+    ///
+    /// Some unwrap are present but cannot panic due to previous checking
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the indexes of the targets are invalid
+    pub fn switch_cards(
+        &mut self,
+        target1: StackTarget,
+        target2: StackTarget,
+    ) -> Result<(), Error> {
+        let (stack1, stack2): (&mut dyn StackProperty, &mut dyn StackProperty) =
+            match (&target1, &target2) {
+                (StackTarget::Player(p1), StackTarget::Player(p2)) => {
+                    if p1 == p2 {
+                        return Ok(());
+                    } else {
+                        // cannot Panic, check above
+                        Self::get_two_of_stack_properties(
+                            &mut self.players,
+                            *p1,
+                            *p2,
+                            |player_index, len| Error::InvalidPlayerIndex { player_index, len },
+                        )?
+                        .unwrap()
+                    }
+                }
+                (StackTarget::Player(p), StackTarget::Stack(s)) => {
+                    let players_len = self.players.len();
+                    let stacks_len = self.stacks.len();
+                    (
+                        self.players
+                            .get_mut(*p)
+                            .ok_or_else(|| Error::InvalidPlayerIndex {
+                                player_index: *p,
+                                len: players_len,
+                            })?,
+                        self.stacks
+                            .get_mut(*s)
+                            .ok_or_else(|| Error::InvalidStackIndex {
+                                stack_index: *s,
+                                len: stacks_len,
+                            })?,
+                    )
+                }
+                (StackTarget::Stack(_), StackTarget::Player(_)) => {
+                    self.switch_cards(target2, target1)?;
+                    return Ok(());
+                    // self.players.get_mut(p).unwrap(),
+                    // self.stacks.get_mut(s).unwrap(),
+                }
+                (StackTarget::Stack(p1), StackTarget::Stack(p2)) => {
+                    if p1 == p2 {
+                        return Ok(());
+                    } else {
+                        // cannot Panic, check above
+                        Self::get_two_of_stack_properties(
+                            &mut self.stacks,
+                            *p1,
+                            *p2,
+                            |stack_index, len| Error::InvalidStackIndex { stack_index, len },
+                        )?
+                        .unwrap()
+                    }
+                }
+            };
+        stack1.switch_cards_with(stack2);
+        Ok(())
     }
 }
 
