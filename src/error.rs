@@ -93,7 +93,7 @@ impl Error {
 }
 
 impl From<std::result::Result<(), Error>> for Error {
-    fn from(value: std::result::Result<(), Error>) -> Self {
+    fn from(value: std::result::result<(), Error>) -> Self {
         value.unwrap_err()
     }
 }
