@@ -18,6 +18,7 @@ use crate::{
     },
     config::{CardEffectsInner, CardEffectsKey, CardPlayerAction, Config, SingleCardEffect},
     error::{DmDescription, Error},
+    mao::automaton::ActionsBuilder,
     mao_event::{
         card_event::CardEvent,
         mao_event_result::{
@@ -421,44 +422,29 @@ impl MaoCore {
     }
 
     fn generate_actions() -> Vec<Vec<NodeState>> {
-        vec![
-            vec![
-                NodeState::new(
-                    MaoInteraction::new(None, PlayerAction::SelectCard),
-                    None,
-                    None,
-                ),
-                NodeState::new(
-                    MaoInteraction::new(None, PlayerAction::SelectPlayableStack),
-                    Some(|player_index, mao, datas| {
-                        MaoCore::play_interaction(mao, player_index, datas)
-                    }),
-                    None,
-                ),
-            ],
-            vec![NodeState::new(
-                MaoInteraction::new(None, PlayerAction::SelectDrawableStack),
-                Some(|player_index, mao, datas| {
-                    MaoCore::draw_interaction(player_index, mao, datas)
-                }),
-                None,
-            )],
-            vec![
-                NodeState::new(
-                    MaoInteraction::new(None, PlayerAction::SelectPlayer),
-                    None,
-                    None,
-                ),
-                NodeState::new(
-                    MaoInteraction::new(None, PlayerAction::DoAction),
-                    // TODO HERE
-                    Some(|player_index, mao, datas| {
-                        MaoCore::on_action_interaction(mao, player_index, datas)
-                    }),
-                    None,
-                ),
-            ],
-        ]
+        let mut actions = ActionsBuilder::build();
+        NodeState::builder()
+            .add_next_action(PlayerAction::SelectCard)
+            .add_next_action(PlayerAction::SelectPlayableStack)
+            .last_node_function(|player_index, mao, datas| {
+                MaoCore::play_interaction(mao, player_index, datas)
+            })
+            .insert_into(&mut actions);
+        NodeState::builder()
+            .add_next_action(PlayerAction::SelectDrawableStack)
+            .last_node_function(|player_index, mao, datas| {
+                MaoCore::draw_interaction(player_index, mao, datas)
+            })
+            .insert_into(&mut actions);
+        NodeState::builder()
+            .add_next_action(PlayerAction::SelectPlayer)
+            .add_next_action(PlayerAction::DoAction)
+            .last_node_function(|player_index, mao, datas| {
+                // TODO HERE
+                MaoCore::on_action_interaction(mao, player_index, datas)
+            })
+            .insert_into(&mut actions);
+        actions.into()
     }
 
     pub fn get_can_play_on_new_stack(&self) -> bool {
