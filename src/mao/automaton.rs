@@ -98,16 +98,142 @@ impl PartialEq for NodeState {
 impl Eq for NodeState {}
 
 impl NodeState {
-    pub fn new(
+    pub fn builder() -> NodeStatesBuilder {
+        NodeStatesBuilder::new()
+    }
+    pub(crate) fn new(
         action: MaoInteraction,
         func: Option<CallbackInteraction>,
-        rule: Option<String>,
+        rule: Option<Arc<str>>,
     ) -> Self {
         Self {
             action,
             func,
             rule: rule.map(|v| v.into()),
         }
+    }
+
+    pub fn action(action: PlayerAction) -> Self {
+        Self {
+            action: MaoInteraction::new(None, action),
+            rule: None,
+            func: None,
+        }
+    }
+
+    fn set_func(&mut self, func: CallbackInteraction) {
+        self.func = Some(func);
+    }
+
+    pub(crate) fn set_rule(&mut self, rule: &Arc<str>) {
+        self.rule = Some(Arc::clone(rule));
+    }
+}
+
+#[derive(Debug)]
+pub struct NodeStatesFinal {
+    actions: Vec<NodeState>,
+}
+
+impl NodeStatesFinal {
+    /// Insert this instance by consuming it into `action`
+    pub fn insert_into(self, action: &mut ActionsBuilder) {
+        action.add_node_state_vec_builder(self);
+    }
+    fn set_rule(&mut self, rule: &Arc<str>) {
+        for action in &mut self.actions {
+            action.set_rule(rule);
+        }
+    }
+
+    /// Sanitize the data:
+    /// - Remove the function if they are nodes and keep the leave one
+    fn sanitize(&mut self) {
+        for action in self.actions.iter_mut().rev().skip(1) {
+            action.func = None;
+        }
+    }
+}
+
+impl From<NodeStatesBuilder> for NodeStatesFinal {
+    fn from(value: NodeStatesBuilder) -> Self {
+        Self {
+            actions: value.actions,
+        }
+    }
+}
+
+impl Into<Vec<NodeState>> for NodeStatesFinal {
+    fn into(self) -> Vec<NodeState> {
+        self.actions
+    }
+}
+
+#[derive(Debug)]
+pub struct NodeStatesBuilder {
+    actions: Vec<NodeState>,
+}
+
+impl NodeStatesBuilder {
+    pub fn new() -> Self {
+        Self { actions: vec![] }
+    }
+
+    /// Push a new `NodeState` after the previous ones
+    pub fn add_next_node(mut self, node: NodeState) -> Self {
+        self.actions.push(node);
+        self
+    }
+
+    /// Push a new `NodeState` after the previous ones using only `action`
+    pub fn add_next_action(mut self, action: PlayerAction) -> Self {
+        self.actions.push(NodeState::action(action));
+        self
+    }
+
+    /// Adds `func` into the last `NodeState` and returns `NodeStateFinal` which can be added to `ActionsBuilder` using `NodeStateFinal::insert_into`
+    pub fn last_node_function(mut self, func: CallbackInteraction) -> NodeStatesFinal {
+        if let Some(last) = self.actions.last_mut() {
+            last.set_func(func);
+        }
+        self.into()
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct ActionsBuilder {
+    rule: Option<Arc<str>>,
+    actions_vec: Vec<Vec<NodeState>>,
+}
+
+impl ActionsBuilder {
+    pub fn build() -> Self {
+        Self::default()
+    }
+
+    /// Set the rules
+    pub fn rule(mut self, rule: &str) -> Self {
+        self.rule = Some(Arc::from(rule));
+        self
+    }
+
+    /// Insert `data` into this instance
+    fn add_node_state_vec_builder(&mut self, mut data: NodeStatesFinal) {
+        if let Some(rule) = self.rule.as_ref() {
+            data.set_rule(rule);
+        }
+        data.sanitize();
+        let data: Vec<_> = data.into();
+        // only push data if not empty
+        if !data.is_empty() {
+            self.actions_vec.push(data);
+        }
+    }
+}
+
+impl Into<Vec<Vec<NodeState>>> for ActionsBuilder {
+    fn into(self) -> Vec<Vec<NodeState>> {
+        self.actions_vec
     }
 }
 
