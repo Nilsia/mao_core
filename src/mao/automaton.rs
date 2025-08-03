@@ -3,7 +3,8 @@ use std::sync::Arc;
 use indextree::{Arena, NodeId};
 
 use crate::{
-    error::Error, mao_event::mao_event_result::PlayerInteractionResult,
+    error::{Error, Result},
+    mao_event::mao_event_result::PlayerInteractionResult,
     stack::stack_type::StackType,
 };
 
@@ -509,7 +510,7 @@ impl Automaton {
         &mut self,
         interaction: MaoInteraction,
         index: usize,
-    ) -> Result<MaoInteractionResult, Error> {
+    ) -> Result<MaoInteractionResult> {
         match self.on_action(interaction.to_owned()) {
             MaoInteractionResult::Nodes(nodes) => {
                 match nodes.get(index) {

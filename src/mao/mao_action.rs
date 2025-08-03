@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, Result};
 
 use super::automaton::PlayerAction;
 
@@ -9,7 +9,7 @@ pub enum IdString {
 }
 
 impl IdString {
-    pub fn index_expecting(&self) -> Result<usize, Error> {
+    pub fn index_expecting(&self) -> Result<usize> {
         match self {
             IdString::String(_) => Err(Error::InvalidExpectingValue(
                 "Expecting index found String".to_owned(),
@@ -18,7 +18,7 @@ impl IdString {
         }
     }
 
-    pub fn string_expecting(&self) -> Result<&str, Error> {
+    pub fn string_expecting(&self) -> Result<&str> {
         match self {
             IdString::String(s) => Ok(s),
             IdString::Index(_) => Err(Error::InvalidExpectingValue(

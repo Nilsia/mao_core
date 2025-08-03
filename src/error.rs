@@ -1,5 +1,6 @@
 use crate::{mao::automaton::PlayerAction, stack::stack_type::StackType};
 
+pub type Result<T> = core::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct DmDescription(pub(crate) String);
 
@@ -91,8 +92,8 @@ impl Error {
     }
 }
 
-impl From<Result<(), Error>> for Error {
-    fn from(value: Result<(), Error>) -> Self {
+impl From<std::result::Result<(), Error>> for Error {
+    fn from(value: std::result::Result<(), Error>) -> Self {
         value.unwrap_err()
     }
 }

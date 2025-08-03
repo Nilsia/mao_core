@@ -4,7 +4,7 @@ use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::{
     config::CardEffectsStruct,
-    error::Error,
+    error::{Error, Result},
     mao::{automaton::NodeState, mao_core::MaoCore},
     mao_event::{mao_event_result::MaoEventResult, MaoEvent},
     VERSION,
@@ -78,7 +78,7 @@ impl Rule {
         self.data.actions.as_mut()
     }
 
-    pub fn is_valid_rule(&self, mao: &mut MaoCore) -> Result<(), Error> {
+    pub fn is_valid_rule(&self, mao: &mut MaoCore) -> Result<()> {
         let event = MaoEvent::VerifyEvent;
         (self.get_on_event_func())(&event, mao).unwrap();
         let version = &self.get_version();
@@ -120,7 +120,7 @@ impl ToOwned for Rule {
 impl TryFrom<&str> for Rule {
     type Error = Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         unsafe {
             Ok(Self::new(
                 Container::load("./".to_string() + value)?,

@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     card::{card_type::CardType, card_value::CardValue},
-    error::Error,
+    error::{Error, Result},
     mao::mao_core::PlayerTurnChange,
 };
 
@@ -106,7 +106,7 @@ impl Config {
         }
         actions.into_iter().collect()
     }
-    pub fn verify(&mut self) -> Result<(), Error> {
+    pub fn verify(&mut self) -> Result<()> {
         let path = PathBuf::from(&self.dirname);
         if !path.is_dir() {
             return Err(Error::InvalidConfig {
@@ -143,7 +143,7 @@ impl FromStr for CardEffectsKey {
     type Err = anyhow::Error;
 
     /// Values_Type
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let splitted: Vec<&str> = s.split('_').collect();
         match splitted.len() {
             0 => Err(anyhow::anyhow!("Invalid key for a card effect")),
@@ -168,7 +168,7 @@ impl FromStr for CardEffectsKey {
 struct CardEffectsKeyVisitor;
 
 impl<'de> Deserialize<'de> for CardEffectsKey {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -183,7 +183,7 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsKeyVisitor {
         write!(formatter, "a key of the possible effects a card can have")
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
@@ -204,7 +204,7 @@ impl Deref for OneOrMoreWords {
 }
 
 impl<'de> Deserialize<'de> for OneOrMoreWords {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: de::Deserializer<'de>,
     {
@@ -216,14 +216,14 @@ impl<'de> Deserialize<'de> for OneOrMoreWords {
                 write!(formatter, "deserializing SayContainer")
             }
 
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
             where
                 E: de::Error,
             {
                 Ok(OneOrMoreWords(vec![String::from(v)]))
             }
 
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
             where
                 A: de::SeqAccess<'dee>,
             {
@@ -266,7 +266,7 @@ impl SingleCardEffect {
 }
 
 impl<'de> Deserialize<'de> for SingleCardEffect {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -278,13 +278,13 @@ impl<'de> Deserialize<'de> for SingleCardEffect {
                 write!(formatter, "deserializing SingleCardEffect")
             }
 
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
             where
                 E: serde::de::Error,
             {
                 SingleCardEffect::from_str(v).map_err(serde::de::Error::custom)
             }
-            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            fn visit_map<A>(self, map: A) -> std::result::Result<Self::Value, A::Error>
             where
                 A: serde::de::MapAccess<'dee>,
             {
@@ -299,7 +299,7 @@ impl<'de> Deserialize<'de> for SingleCardEffect {
 impl FromStr for SingleCardEffect {
     type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         s.parse::<PlayerTurnChange>().map(Self::PlayerTurnChange)
     }
 }
@@ -366,7 +366,7 @@ impl CardEffects {
 struct CardEffectsVisitor;
 
 impl<'de> Deserialize<'de> for CardEffects {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -381,7 +381,7 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
         write!(formatter, "a card effect is wrong")
     }
 
-    fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+    fn visit_map<A>(self, map: A) -> std::result::Result<Self::Value, A::Error>
     where
         A: de::MapAccess<'de>,
     {
@@ -389,7 +389,7 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
             .map(CardEffects::single)
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
     where
         E: de::Error,
     {
@@ -398,7 +398,7 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
             .map(CardEffects::single)
     }
 
-    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -416,7 +416,7 @@ impl<'de> serde::de::Visitor<'de> for CardEffectsVisitor {
 impl FromStr for CardEffectsInner {
     type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         s.parse::<SingleCardEffect>().map(CardEffectsInner::only)
     }
 }

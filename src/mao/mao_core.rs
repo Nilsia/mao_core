@@ -15,7 +15,7 @@ use crate::{
         game_card::GameCard, Card,
     },
     config::{CardEffectsInner, CardEffectsKey, CardPlayerAction, Config, SingleCardEffect},
-    error::{DmDescription, Error},
+    error::{DmDescription, Error, Result},
     mao::automaton::ActionsBuilder,
     mao_event::{
         card_event::CardEvent,
@@ -61,7 +61,7 @@ pub enum PlayerTurnUpdater {
 impl FromStr for PlayerTurnUpdater {
     type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let splitted: Vec<&str> = s.split('_').collect();
         match splitted.len() {
             2 => match *splitted.first().unwrap() {
@@ -98,7 +98,7 @@ impl<'dee> serde::de::Visitor<'dee> for PlayerTurnChangeVisitor {
         write!(formatter, "internal error when parsing PlayerTurnChange")
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
@@ -107,7 +107,7 @@ impl<'dee> serde::de::Visitor<'dee> for PlayerTurnChangeVisitor {
 }
 
 impl<'de> Deserialize<'de> for PlayerTurnChange {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -118,7 +118,7 @@ impl<'de> Deserialize<'de> for PlayerTurnChange {
 impl FromStr for PlayerTurnChange {
     type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let splitted: Vec<&str> = s.split('_').collect();
         match splitted.len() {
             3 => {
@@ -242,7 +242,7 @@ impl DataContainer for MaoCore {
 
 // getters and setters
 impl MaoCore {
-    pub fn get_game_card_of_played_card(&mut self, index: usize) -> Result<&mut GameCard, Error> {
+    pub fn get_game_card_of_played_card(&mut self, index: usize) -> Result<&mut GameCard> {
         let mut played_card_actions = self
             .automaton
             .previous_interactions_mut()
@@ -278,7 +278,7 @@ impl MaoCore {
     pub fn available_rules(&self) -> &[Rule] {
         &self.available_rules
     }
-    pub fn common_penality_to_player(&mut self, player_index: usize) -> Result<(), Error> {
+    pub fn common_penality_to_player(&mut self, player_index: usize) -> Result<()> {
         let card = self.draw_multiple_cards_unchosen(1)?.pop().unwrap();
         let len = self.players.len();
         match self.players.get_mut(player_index) {
@@ -342,7 +342,7 @@ impl MaoCore {
     /// This function will return an error if
     /// + the config is not valid
     /// + a rule cannot be found
-    pub fn from_config(config: &mut Config) -> Result<Self, Error> {
+    pub fn from_config(config: &mut Config) -> Result<Self> {
         let path = PathBuf::from(&config.dirname);
         config.verify()?;
         let rules: Vec<String> = fs::read_dir(&path)
@@ -449,7 +449,7 @@ impl MaoCore {
         self.can_play_on_new_stack
     }
 
-    pub fn get_player_hand_len(&self, player_index: usize) -> Result<usize, Error> {
+    pub fn get_player_hand_len(&self, player_index: usize) -> Result<usize> {
         Ok(self
             .players
             .get(player_index)
@@ -573,10 +573,7 @@ impl MaoCore {
         Ok(())
     }
 
-    fn on_play_card(
-        &mut self,
-        mut card_event: CardEvent,
-    ) -> Result<Vec<PlayerInteractionResult>, Error> {
+    fn on_play_card(&mut self, mut card_event: CardEvent) -> Result<Vec<PlayerInteractionResult>> {
         // TODO TMP
         card_event
             .played_card
@@ -736,10 +733,7 @@ impl MaoCore {
     /// # Errors
     ///
     /// This function will return an error if .
-    fn on_turn_ends(
-        &mut self,
-        wrong_interaction: bool,
-    ) -> Result<Vec<PlayerInteractionResult>, Error> {
+    fn on_turn_ends(&mut self, wrong_interaction: bool) -> Result<Vec<PlayerInteractionResult>> {
         // maybe add some check before like checking if the last inserted is a changeable turn
         // maybe add this wront interaction ?
         // punched has been triggered test other ones
@@ -945,7 +939,7 @@ impl MaoCore {
     fn get_card_index_from_automaton_interactions(
         &self,
         interaction_index: Option<usize>,
-    ) -> Result<usize, Error> {
+    ) -> Result<usize> {
         self.automaton.previous_interactions()[interaction_index.unwrap_or(0)]
             .data
             .as_ref()
@@ -956,10 +950,7 @@ impl MaoCore {
             .index_expecting()
     }
 
-    pub fn get_game_card_play_interaction(
-        &mut self,
-        player_index: usize,
-    ) -> Result<&mut GameCard, Error> {
+    pub fn get_game_card_play_interaction(&mut self, player_index: usize) -> Result<&mut GameCard> {
         self.verify_play_interaction(self.automaton.previous_interactions())?;
         let card_index = self.get_card_index_from_automaton_interactions(Some(0))?;
         let player = self.get_player_mut(player_index)?;
@@ -968,7 +959,7 @@ impl MaoCore {
         Ok(player_card)
     }
 
-    fn get_player(&self, player_index: usize) -> Result<&Player, Error> {
+    fn get_player(&self, player_index: usize) -> Result<&Player> {
         self.players
             .get(player_index)
             .ok_or(Error::InvalidPlayerIndex {
@@ -977,18 +968,18 @@ impl MaoCore {
             })
     }
 
-    fn get_current_player_mut(&mut self) -> Result<&mut Player, Error> {
+    fn get_current_player_mut(&mut self) -> Result<&mut Player> {
         self.get_player_mut(self.player_turn)
     }
 
-    fn get_player_mut(&mut self, player_index: usize) -> Result<&mut Player, Error> {
+    fn get_player_mut(&mut self, player_index: usize) -> Result<&mut Player> {
         let len = self.players.len();
         self.players
             .get_mut(player_index)
             .ok_or(Error::InvalidPlayerIndex { player_index, len })
     }
 
-    fn verify_play_interaction(&self, interactions: &[MaoInteraction]) -> Result<(), Error> {
+    fn verify_play_interaction(&self, interactions: &[MaoInteraction]) -> Result<()> {
         let expected = PLAY_INTERACTION_VERIFICATION;
         if !self.correct_player_action(&expected, interactions) {
             // TODO
@@ -1142,7 +1133,7 @@ impl MaoCore {
     /// This function will return an error if
     /// - it cannot find a drawable stack
     /// - there is not enough cards inside all drawable stacks together
-    pub fn draw_multiple_cards_unchosen(&mut self, mut nb: usize) -> Result<Vec<GameCard>, Error> {
+    pub fn draw_multiple_cards_unchosen(&mut self, mut nb: usize) -> Result<Vec<GameCard>> {
         let mut cards = Vec::with_capacity(nb);
         let mut empty_first = false;
         while nb != 0 {
@@ -1188,7 +1179,7 @@ impl MaoCore {
     /// # Errors
     ///
     /// This function will return an error if the [`Rule`] has not been found according to `rule_name`
-    pub fn activate_rule(&mut self, rule_name: &str) -> Result<(), Error> {
+    pub fn activate_rule(&mut self, rule_name: &str) -> Result<()> {
         let rule_name = "lib".to_owned() + rule_name;
         let (rule_index, _) =
             self.get_avalaible_rule_by_name(&rule_name)
@@ -1207,7 +1198,7 @@ impl MaoCore {
         Ok(())
     }
 
-    pub fn activate_rule_by_index(&mut self, index: usize) -> Result<(), Error> {
+    pub fn activate_rule_by_index(&mut self, index: usize) -> Result<()> {
         // the index des not correspond to an available rule
         match self.available_rules.get(index) {
             Some(rule) => {
@@ -1231,7 +1222,7 @@ impl MaoCore {
         }
     }
 
-    pub fn deactivate_rule_by_index(&mut self, index: usize) -> Result<(), Error> {
+    pub fn deactivate_rule_by_index(&mut self, index: usize) -> Result<()> {
         // TODO remove actions that the rule added
         // the index des not correspond to an available rule
         if self.available_rules.get(index).is_none() {
@@ -1367,7 +1358,7 @@ impl MaoCore {
     pub fn get_stack_target(
         &mut self,
         target_index: StackTarget,
-    ) -> Result<&mut dyn StackProperty, Error> {
+    ) -> Result<&mut dyn StackProperty> {
         let s: &mut dyn StackProperty = match target_index {
             StackTarget::Player(i) => {
                 let len = self.players.len();
@@ -1392,10 +1383,7 @@ impl MaoCore {
     /// # Errors
     ///
     /// This function will return an error if `stack_index` is not valid
-    pub fn get_top_card_playable_stack(
-        &self,
-        stack_index: usize,
-    ) -> Result<Option<&GameCard>, Error> {
+    pub fn get_top_card_playable_stack(&self, stack_index: usize) -> Result<Option<&GameCard>> {
         self.stacks
             .get(stack_index)
             .ok_or(Error::InvalidStackIndex {
@@ -1481,7 +1469,7 @@ impl MaoCore {
         &mut self,
         player_index: usize,
         stack_index: usize,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         match self.stacks.get_mut(stack_index) {
             Some(stack) => {
                 let card = match stack.pop() {
@@ -1522,14 +1510,14 @@ impl MaoCore {
     /// This function will return an error if
     /// + there is not Drawable Stack available
     /// + there is not enough cards inside all Drawable Stacks
-    pub fn init_player(&mut self, pseudo: String, nb_card: usize) -> Result<Player, Error> {
+    pub fn init_player(&mut self, pseudo: String, nb_card: usize) -> Result<Player> {
         Ok(Player::new(
             pseudo,
             self.draw_multiple_cards_unchosen(nb_card)?,
         ))
     }
 
-    pub fn init_players(&mut self, pseudos: &[String], nb_card: usize) -> Result<(), Error> {
+    pub fn init_players(&mut self, pseudos: &[String], nb_card: usize) -> Result<()> {
         let mut players = Vec::with_capacity(pseudos.len());
         for pseudo in pseudos {
             players.push(self.init_player(pseudo.to_owned(), nb_card)?);
@@ -1547,7 +1535,7 @@ impl MaoCore {
         Ok(())
     }
 
-    pub fn init_all_players(&mut self, nb_card: usize) -> Result<(), Error> {
+    pub fn init_all_players(&mut self, nb_card: usize) -> Result<()> {
         for i in 0..self.players.len() {
             let cards: Vec<GameCard> = self.draw_multiple_cards_unchosen(nb_card)?.to_vec();
             self.players
@@ -1559,7 +1547,7 @@ impl MaoCore {
         Ok(())
     }
 
-    pub fn init_new_game(&mut self, nb_card: usize) -> Result<(), Error> {
+    pub fn init_new_game(&mut self, nb_card: usize) -> Result<()> {
         // TODO set dealer
         for player in self.players.iter_mut() {
             player.get_cards_mut().clear();
@@ -1615,7 +1603,7 @@ impl MaoCore {
         player_index: usize,
         event: &MaoEvent,
         took_penality: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         match event {
             MaoEvent::PlayedCardEvent(card_event) => {
                 // no need to remove / add cards handled before
@@ -1676,7 +1664,7 @@ impl MaoCore {
     /// This function will return an error if
     /// + there is not `on_event` functions inside the rule (should never occur)
     /// + the `on_event` function from the rule fails
-    pub fn on_event(&mut self, event: &MaoEvent) -> Result<Vec<MaoEventResult>, Error> {
+    pub fn on_event(&mut self, event: &MaoEvent) -> Result<Vec<MaoEventResult>> {
         if event.is_recordable() {
             self.player_events.push(event.to_owned());
         }
@@ -1703,7 +1691,7 @@ impl MaoCore {
         player_index: usize,
         previous_event: &MaoEvent,
         event_results_iter: I,
-    ) -> Result<Vec<PlayerInteractionResult>, Error>
+    ) -> Result<Vec<PlayerInteractionResult>>
     where
         I: IntoIterator<Item = &'a MaoEventResult>,
     {
@@ -1796,7 +1784,7 @@ impl MaoCore {
         &mut self,
         target_index: StackTarget,
         card: GameCard,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         self.get_stack_target(target_index)?.add_card(card);
         Ok(())
     }
@@ -1811,7 +1799,7 @@ impl MaoCore {
         target_index: StackTarget,
         played_by: usize,
         mut card: GameCard,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         card.set_played_by(Some(played_by));
         self.get_stack_target(target_index)?.add_card(card);
         Ok(())
@@ -1828,7 +1816,7 @@ impl MaoCore {
         &mut self,
         stack_index: Option<usize>,
         check_rules: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         // checking rules before refilling the stack
         let stack_index = stack_index.unwrap_or(
             self.get_drawable_stacks()
@@ -1891,7 +1879,7 @@ impl MaoCore {
         &mut self,
         target_index: StackTarget,
         card_index: usize,
-    ) -> Result<GameCard, Error> {
+    ) -> Result<GameCard> {
         self.get_stack_target(target_index)?.remove_card(card_index)
     }
 
@@ -1902,7 +1890,7 @@ impl MaoCore {
     /// # Errors
     ///
     /// This function will return an error if a rule is not valid as a [`Vec`]
-    pub fn rules_valid(&mut self) -> Result<(), Vec<Error>> {
+    pub fn rules_valid(&mut self) -> std::result::Result<(), Vec<Error>> {
         let mut invalids = Vec::new();
         for i in 0..self.available_rules.len() {
             let rule = self.available_rules.get(i).unwrap().to_owned();
@@ -1978,7 +1966,7 @@ impl MaoCore {
     fn verify_or_get_none_empty_drawable_stack(
         &mut self,
         stack_index: Option<usize>,
-    ) -> Result<usize, Error> {
+    ) -> Result<usize> {
         Ok(match stack_index {
             Some(index) => {
                 let stack = self.stacks.get(index).ok_or(Error::InvalidStackIndex {
@@ -2009,10 +1997,7 @@ impl MaoCore {
         })
     }
 
-    fn on_draw_card(
-        &mut self,
-        mut card_event: CardEvent,
-    ) -> Result<Vec<PlayerInteractionResult>, Error> {
+    fn on_draw_card(&mut self, mut card_event: CardEvent) -> Result<Vec<PlayerInteractionResult>> {
         // get the stack if present otherwise get drawable stack
         let stack_index = self.verify_or_get_none_empty_drawable_stack(card_event.stack_index)?;
 
@@ -2079,7 +2064,7 @@ impl MaoCore {
         a: usize,
         b: usize,
         error: fn(index: usize, len: usize) -> Error,
-    ) -> Result<Option<(&'a mut dyn StackProperty, &'a mut dyn StackProperty)>, Error>
+    ) -> Result<Option<(&'a mut dyn StackProperty, &'a mut dyn StackProperty)>>
     where
         T: StackProperty,
     {
@@ -2110,11 +2095,7 @@ impl MaoCore {
     /// # Errors
     ///
     /// This function will return an error if the indexes of the targets are invalid
-    pub fn switch_cards(
-        &mut self,
-        target1: StackTarget,
-        target2: StackTarget,
-    ) -> Result<(), Error> {
+    pub fn switch_cards(&mut self, target1: StackTarget, target2: StackTarget) -> Result<()> {
         let (stack1, stack2): (&mut dyn StackProperty, &mut dyn StackProperty) =
             match (&target1, &target2) {
                 (StackTarget::Player(p1), StackTarget::Player(p2)) => {
